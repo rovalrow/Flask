@@ -334,15 +334,15 @@
 
             let isProfane = await checkProfanity(customName);
             if (isProfane) {
-                alert("Inappropriate name detected! You are banned from generating for 2 days.");
-                countdownTime = 172800;
+                alert("Inappropriate name detected! You are banned from generating for 1 day.");
+                countdownTime = 86400;
                 localStorage.setItem("countdownTime", countdownTime);
                 startCountdown(generateButton);
                 return;
             }
 
             isGenerating = true;
-            countdownTime = 60;
+            countdownTime = 20;
             localStorage.setItem("countdownTime", countdownTime);
             generateButton.disabled = true;
             generateButton.textContent = `Wait ${countdownTime}s To Generate Again`;
