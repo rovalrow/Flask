@@ -1,4 +1,4 @@
 flask
 requests
 gunicorn
-supabase-py
+supabase
