@@ -84,7 +84,7 @@ def execute(script_name):
             .discord-button:hover { 
                 background-color: #222222; /* Slightly lighter black on hover */
             }
-            .made-by {
+        .made-by {
             margin-top: 15px;
             color: red;
             font-size: 18px;
@@ -94,7 +94,7 @@ def execute(script_name):
     </head>
     <body>
         <h1>🚫 Unauthorized to see this script. 🚫<br> Close & Proceed.</h1>
-            <button class="discord-button" onclick="window.location.href='https://discord.gg/SdMXRFPUYx'">Discord</button>
+            <button class="discord-button" onclick="window.location.href='https://discord.gg/xHXTSFXcUu'">Discord</button>
             <div class="made-by">Made By: Shinzou</div>
         </body>
 </html>
@@ -106,7 +106,7 @@ def execute(script_name):
 
     return "Invalid script link.", 404
 
-# âœ… Keep-alive function to prevent Replit from sleeping
+# ✅ Keep-alive function to prevent Replit from sleeping
 def keep_alive():
     def run():
         app.run(host="0.0.0.0", port=8080)
@@ -114,7 +114,7 @@ def keep_alive():
     thread.daemon = True  # Kills the thread if the main script stops
     thread.start()
 
-# âœ… Run Flask in a separate thread
+# ✅ Run Flask in a separate thread
 if __name__ == '__main__':
     keep_alive()
     while True:
