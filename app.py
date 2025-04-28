@@ -9,8 +9,9 @@ import json
 app = Flask(__name__)
 
 # Supabase configuration
-SUPABASE_URL = os.environ.get("https://hafsqbqbbgrcrdpuwpel.supabase.co")
-SUPABASE_KEY = os.environ.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhZnNxYnFiYmdyY3JkcHV3cGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU4NDM5NTgsImV4cCI6MjA2MTQxOTk1OH0.xJ36qskYiGoH-ywbrWQZlJOvGXzS4_NYxRO0tuRyy5c")
+# Note: Don't hardcode credentials in production code. Use environment variables instead.
+SUPABASE_URL = "https://hafsqbqbbgrcrdpuwpel.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhZnNxYnFiYmdyY3JkcHV3cGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU4NDM5NTgsImV4cCI6MjA2MTQxOTk1OH0.xJ36qskYiGoH-ywbrWQZlJOvGXzS4_NYxRO0tuRyy5c"
 SUPABASE_BUCKET = "scripts"  # your Supabase bucket name
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -92,7 +93,12 @@ def generate():
     obfuscated_script = obfuscation_result["obfuscated_code"]
     script_name = custom_name if custom_name else str(uuid.uuid4())
 
-        supabase.storage.from_(SUPABASE_BUCKET).upload(f"{script_name}.lua", obfuscated_script.encode())
+    try:
+        # Upload the obfuscated script to Supabase storage
+        supabase.storage.from_(SUPABASE_BUCKET).upload(
+            f"{script_name}.lua", 
+            bytes(obfuscated_script, 'utf-8')
+        )
     except Exception as e:
         return jsonify({"error": f"Failed to upload script: {str(e)}"}), 500
 
@@ -102,69 +108,70 @@ def generate():
 def execute(script_name):
     script_name = sanitize_filename(script_name)
 
-        file_response = supabase.storage.from_(SUPABASE_BUCKET).download(f"{script_name}.lua")
-        content = file_response.decode()
-    except Exception:
-        return "Invalid script link.", 404
+    try:
+        # Download the file from Supabase storage
+        file_data = supabase.storage.from_(SUPABASE_BUCKET).download(f"{script_name}.lua")
+        content = file_data.decode('utf-8')
+    except Exception as e:
+        return f"Invalid script link. Error: {str(e)}", 404
 
     accept_header = request.headers.get("Accept", "").lower()
 
     if "text/html" in accept_header:
-            return """
-            <html>
-            <head>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap');
-                    body { 
-                        display: flex; 
-                        flex-direction: column; 
-                        justify-content: center; 
-                        align-items: center; 
-                        height: 100vh; 
-                        margin: 0; 
-                        background-color: #0A0A2A;
-                        font-family: 'Fredoka', sans-serif;
-                    }
-                    h1 { 
-                        font-size: 40px; 
-                        text-align: center; 
-                        color: red; 
-                    }
-                    .discord-button { 
-                        margin-top: 20px;
-                        padding: 12px 24px; 
-                        font-size: 20px; 
-                        background-color: #000000; 
-                        color: white; 
-                        border: none; 
-                        border-radius: 12px; 
-                        cursor: pointer; 
-                        font-family: 'Fredoka', sans-serif;
-                        transition: 0.3s;
-                    }
-                    .discord-button:hover { 
-                        background-color: #222222; 
-                    }
-                    .made-by {
-                        margin-top: 15px;
-                        color: red;
-                        font-size: 18px;
-                        font-family: 'Fredoka', sans-serif;
-                    }
-                </style>
-            </head>
-            <body>
-                <h1>🚫 Unauthorized to see this script. 🚫<br> Close & Proceed.</h1>
-                <button class="discord-button" onclick="window.location.href='https://discord.gg/SdMXRFPUYx'">Discord</button>
-                <div class="made-by">Made By: Shinzou</div>
-            </body>
-            </html>
-            """, 403
+        # Return HTML version for browsers
+        return """
+        <html>
+        <head>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap');
+                body { 
+                    display: flex; 
+                    flex-direction: column; 
+                    justify-content: center; 
+                    align-items: center; 
+                    height: 100vh; 
+                    margin: 0; 
+                    background-color: #0A0A2A;
+                    font-family: 'Fredoka', sans-serif;
+                }
+                h1 { 
+                    font-size: 40px; 
+                    text-align: center; 
+                    color: red; 
+                }
+                .discord-button { 
+                    margin-top: 20px;
+                    padding: 12px 24px; 
+                    font-size: 20px; 
+                    background-color: #000000; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 12px; 
+                    cursor: pointer; 
+                    font-family: 'Fredoka', sans-serif;
+                    transition: 0.3s;
+                }
+                .discord-button:hover { 
+                    background-color: #222222; 
+                }
+                .made-by {
+                    margin-top: 15px;
+                    color: red;
+                    font-size: 18px;
+                    font-family: 'Fredoka', sans-serif;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>🚫 Unauthorized to see this script. 🚫<br> Close & Proceed.</h1>
+            <button class="discord-button" onclick="window.location.href='https://discord.gg/SdMXRFPUYx'">Discord</button>
+            <div class="made-by">Made By: Shinzou</div>
+        </body>
+        </html>
+        """, 403
 
-    with open(script_path, "r", encoding="utf-8") as f:
-            return f.read(), 200
-
-    return "Invalid script link.", 404
+    # Return the actual script content for non-browser requests
+    return content, 200
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
