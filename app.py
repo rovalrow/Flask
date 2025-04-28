@@ -27,7 +27,7 @@ def get_next_script_id():
     return max(script_numbers, default=0) + 1
 
 def obfuscate_lua_code(code):
-    """Sends Lua code to obfuscation API and returns obfuscated result."""
+    """Sends Lua code to obfuscation API and returns obfuscated result with maximum security."""
     try:
         # Step 1: Create new script session
         new_script_headers = {
@@ -47,22 +47,34 @@ def obfuscate_lua_code(code):
         
         session_id = session_data["sessionId"]
         
-        # Step 2: Obfuscate the script
+        # Step 2: Obfuscate the script with enhanced settings
         obfuscate_headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "sessionId": session_id,
             "content-type": "application/json"
         }
         
+        # Advanced obfuscation settings for maximum security
         obfuscation_options = {
             "MinifiyAll": True,
             "Virtualize": True,
+            "Seed": str(uuid.uuid4().int)[:8],  # Random seed for unpredictable obfuscation
             "CustomPlugins": {
                 "EncryptStrings": True,
+                "CachedEncryptStrings": True,
                 "MutateAllLiterals": True,
+                "MutateAllLiteralsIntoDeclarations": True,
                 "ConstMaker": True,
                 "ControlFlowFlattenV2AllBlocks": True,
-                "JunkifyAllIfStatements": True
+                "JunkifyAllIfStatements": True,
+                "JunkifyBlockToIf": True,
+                "MakeGlobalsLookups": True,
+                "MixedBooleanArithmetic": True,
+                "FuncChopper": True,
+                "DummyFunctionArgs": [3, 7],  # Add random arguments to functions
+                "EncryptFuncDeclaration": True,
+                "SwizzleLookups": True,
+                "TableIndirection": True
             }
         }
         
