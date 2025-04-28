@@ -60,21 +60,13 @@ def obfuscate_lua_code(code):
             "Virtualize": True,
             "Seed": str(uuid.uuid4().int)[:8],  # Random seed for unpredictable obfuscation
             "CustomPlugins": {
-                "EncryptStrings": True,
                 "CachedEncryptStrings": True,
-                "MutateAllLiterals": True,
-                "MutateAllLiteralsIntoDeclarations": True,
-                "ConstMaker": True,
+                "CallRetAssignment": True,
                 "ControlFlowFlattenV2AllBlocks": True,
-                "JunkifyAllIfStatements": True,
-                "JunkifyBlockToIf": True,
-                "MakeGlobalsLookups": True,
-                "MixedBooleanArithmetic": True,
+                "DummyFunctionArgs": True,
                 "FuncChopper": True,
-                "DummyFunctionArgs": [3, 7],  # Add random arguments to functions
-                "EncryptFuncDeclaration": True,
-                "SwizzleLookups": True,
-                "TableIndirection": True
+                "Minifier2": True,
+                "WowPacker": True
             }
         }
         
