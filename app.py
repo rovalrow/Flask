@@ -82,11 +82,18 @@ def execute(script_name):
             .discord-button:hover { 
                 background-color: #222222; /* Slightly lighter black on hover */
             }
+            .made-by {
+            margin-top: 15px;
+            color: red;
+            font-size: 18px;
+            font-family: 'Fredoka', sans-serif;
+        }
         </style>
     </head>
     <body>
         <h1>🚫 Unauthorized to see this script. 🚫<br> Close & Proceed.</h1>
         <button class="discord-button" onclick="window.location.href='https://discord.gg/neBEfZvVpD'">Discord</button>
+    <div class="made-by">Made By: Shinzou</div>
     </body>
 </html>
             """, 403
