@@ -86,7 +86,7 @@ def execute(script_name):
     </head>
     <body>
         <h1>🚫 Unauthorized to see this script. 🚫<br> Close & Proceed.</h1>
-        <button class="discord-button" onclick="window.location.href='https://discord.gg/SdMXRFPUYx'">Discord</button>
+        <button class="discord-button" onclick="window.location.href='https://discord.gg/neBEfZvVpD'">Discord</button>
     </body>
 </html>
             """, 403
