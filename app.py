@@ -87,7 +87,7 @@ def generate():
         return jsonify(obfuscation_result), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
-    base_name = custom_name if custom_name else str(get_next_script_id())
+    base_name = custom_name if custom_name else uuid.uuid4().hex
     script_name = base_name
     counter = 1
     while os.path.exists(os.path.join(SCRIPTS_DIR, f"{script_name}.lua")):
