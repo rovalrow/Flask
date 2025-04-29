@@ -101,97 +101,99 @@ def generate():
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
-@app.route('/scriptguardian/files/scripts/loaders/<script_name>')
+@app.route('/scriptguardian/files/scripts/loaders/<script_name>', methods=['GET', 'POST'])
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
 
-    if os.path.exists(script_path):
-        user_agent = request.headers.get("User-Agent", "").lower()
+    if not os.path.exists(script_path):
+        return 'game.Players.LocalPlayer:Kick("The script you\'re trying to run no longer exists. Please regenerate at scriptguardian.onrender.com again.")', 200, {'Content-Type': 'text/plain'}
 
-        # Check if request is NOT from Roblox
-        if not ("roblox" in user_agent or "robloxapp" in user_agent):
-            # Serve the Unauthorized HTML
-            return """
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta content="width=device-width,initial-scale=1" name="viewport">
-                <title>Unauthorized</title>
-                <style>
-                    body {
-                        margin: 0;
-                        font-family: Roboto, Arial, sans-serif;
-                        background-color: #1a1e30;
-                        color: #fff;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        height: 100vh;
-                    }
-                    .container {
-                        text-align: center;
-                        padding: 20px;
-                        background: rgba(255, 255, 255, 0);
-                        border-radius: 10px;
-                        box-shadow: 0 8px 15px transparent;
-                    }
-                    .brand {
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        margin-bottom: 20px;
-                    }
-                    .brand-text {
-                        font-size: 18px;
-                        font-weight: 600;
-                        color: #fff;
-                        margin-top: 5px;
-                    }
-                    h1 {
-                        font-size: 24px;
-                        margin-bottom: 10px;
-                    }
-                    p {
-                        font-size: 16px;
-                        color: #d1d1d1;
-                    }
-                    .discord-button { 
-                        margin-top: 20px;
-                        padding: 12px 24px; 
-                        font-size: 20px; 
-                        background-color: #000000; 
-                        color: white; 
-                        border: none; 
-                        border-radius: 12px; 
-                        cursor: pointer; 
-                        font-family: 'Fredoka', sans-serif;
-                        transition: 0.3s;
-                    }
-                    .discord-button:hover { 
-                        background-color: #222222; 
-                    }
-                    .made-by {
-                        margin-top: 15px;
-                        color: red;
-                        font-size: 18px;
-                        font-family: 'Fredoka', sans-serif;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="brand">
-                        <div class="brand-text">⛔ Access Denied ⛔</div>
-                    </div>
-                    <h1>You do not have permission to view these files.</h1>
-                    <p>Please close this page and continue to a valid location.</p>
-                    <button class="discord-button" onclick="window.location.href='https://discord.gg/jdark'">Discord</button>
-                    <div class="made-by">Made By: Shinzou</div>
-                </div>
-            </body>
-            </html>
-            """, 403
+    user_agent = request.headers.get("User-Agent", "").lower()
+    is_roblox = "roblox" in user_agent or "robloxapp" in user_agent
+
+    if is_roblox:
+        with open(script_path, "r", encoding="utf-8") as f:
+            return f.read(), 200, {'Content-Type': 'text/plain'}
+
+    # POST verification of reCAPTCHA
+    if request.method == 'POST':
+        token = request.form.get('g-recaptcha-response', '')
+        if not token:
+            return jsonify({"error": "Missing CAPTCHA token"}), 400
+
+        verify_url = "https://www.google.com/recaptcha/api/siteverify"
+        data = {
+            'secret': "6LdgdSgrAAAAAMAAFKzAKbUREwP9ShVuJfUk9SSe",
+            'response': token
+        }
+        response = requests.post(verify_url, data=data)
+        result = response.json()
+
+        if result.get("success"):
+            with open(script_path, "r", encoding="utf-8") as f:
+                return f.read(), 200, {'Content-Type': 'text/plain'}
+        else:
+            return "CAPTCHA verification failed", 403
+
+    # Serve CAPTCHA form on GET
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta content="width=device-width,initial-scale=1" name="viewport">
+        <title>Unauthorized</title>
+        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+        <style>
+            body {{
+                margin: 0;
+                font-family: Roboto, Arial, sans-serif;
+                background-color: #1a1e30;
+                color: #fff;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                text-align: center;
+            }}
+            .container {{
+                padding: 30px;
+            }}
+            .discord-button {{
+                margin-top: 20px;
+                padding: 12px 24px;
+                font-size: 20px;
+                background-color: #000000;
+                color: white;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: 0.3s;
+            }}
+            .discord-button:hover {{
+                background-color: #222222;
+            }}
+            .made-by {{
+                margin-top: 15px;
+                color: red;
+                font-size: 18px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>⛔ Access Denied</h1>
+            <p>This page is restricted. Confirm you're not a bot.</p>
+            <form action="" method="POST">
+                <div class="g-recaptcha" data-sitekey="6LdgdSgrAAAAAL7zsuu9Lh-cEeTFdmB0BbFu3Ntr"></div>
+                <br>
+                <button type="submit" class="discord-button">I'm not a robot</button>
+            </form>
+            <div class="made-by">Made By: Shinzou</div>
+        </div>
+    </body>
+    </html>
+    """, 403
 
         # If User-Agent is Roblox, send raw Lua script
         with open(script_path, "r", encoding="utf-8") as f:
