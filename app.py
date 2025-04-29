@@ -5,14 +5,14 @@ import requests
 import uuid
 import json
 
-app = Flask(__name__, template_folder="templates")
+app = Flask(__name__)
 SCRIPTS_DIR = "scripts"
 
 # Create scripts folder if it doesn't exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
 # Obfuscator API Config
-OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "your-default-api-key-here")
+OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 
@@ -32,32 +32,33 @@ def obfuscate_lua_code(code):
         # Step 1: Create new script session
         new_script_headers = {
             "apikey": OBFUSCATOR_API_KEY,
-            "content-type": "text/plain"
+            "content-type": "text"
         }
-
+        
         session_response = requests.post(
             NEW_SCRIPT_URL,
             headers=new_script_headers,
             data=code
         )
-
+        
         session_data = session_response.json()
-        if session_response.status_code != 200 or "sessionId" not in session_data:
+        if session_data.get("message") is not None or not session_data.get("sessionId"):
             return {"error": f"Failed to create obfuscation session: {session_data.get('message', 'Unknown error')}"}, False
-
+        
         session_id = session_data["sessionId"]
-
+        
         # Step 2: Obfuscate the script with enhanced settings
         obfuscate_headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "sessionId": session_id,
             "content-type": "application/json"
         }
-
+        
+        # Advanced obfuscation settings for maximum security
         obfuscation_options = {
             "MinifiyAll": True,
             "Virtualize": True,
-            "Seed": str(uuid.uuid4().int)[:8],
+            "Seed": str(uuid.uuid4().int)[:8],  # Random seed for unpredictable obfuscation
             "CustomPlugins": {
                 "CachedEncryptStrings": True,
                 "CallRetAssignment": True,
@@ -68,19 +69,19 @@ def obfuscate_lua_code(code):
                 "WowPacker": True
             }
         }
-
+        
         obfuscate_response = requests.post(
             OBFUSCATE_URL,
             headers=obfuscate_headers,
             data=json.dumps(obfuscation_options)
         )
-
+        
         obfuscate_data = obfuscate_response.json()
-        if obfuscate_response.status_code != 200 or "code" not in obfuscate_data:
+        if obfuscate_data.get("message") is not None or not obfuscate_data.get("code"):
             return {"error": f"Failed to obfuscate code: {obfuscate_data.get('message', 'Unknown error')}"}, False
-
+        
         return {"obfuscated_code": obfuscate_data["code"]}, True
-
+    
     except Exception as e:
         return {"error": f"Obfuscation service error: {str(e)}"}, False
 
@@ -90,22 +91,21 @@ def home():
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
-
+    data = request.json
     script_content = data.get("script", "").strip()
     custom_name = sanitize_filename(data.get("name", "").strip())
 
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
-
+    
+    # Process the Lua code through the obfuscator API
     obfuscation_result, success = obfuscate_lua_code(script_content)
-
+    
     if not success:
         return jsonify(obfuscation_result), 500
-
+    
     obfuscated_script = obfuscation_result["obfuscated_code"]
+    
     script_name = custom_name if custom_name else str(get_next_script_id())
     script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
 
@@ -119,32 +119,38 @@ def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
 
     if os.path.exists(script_path):
-        accept_header = request.headers.get("Accept", "").lower()
+        user_agent = request.headers.get('User-Agent')
 
-        if "text/html" in accept_header:
-            return render_template("unauthorized.html")
+        # ALLOW ONLY if the User-Agent is Roblox's HttpService (or something custom you define)
+        allowed_agents = ["roblox", "httpservice", "game", "studio"]  # lowercase keywords expected in Roblox requests
 
-        if "python" in request.headers.get("User-Agent", "").lower() or "curl" in request.headers.get("User-Agent", "").lower():
-            return render_template("cloudflare.html")
+        # If User-Agent is missing OR doesn't contain Roblox-like keywords => block
+        if (
+            not user_agent or
+            not any(keyword in user_agent.lower() for keyword in allowed_agents)
+        ):
+            return render_template("unauthorized.html"), 403
 
+        # Otherwise, serve the script
         with open(script_path, "r", encoding="utf-8") as f:
             return f.read(), 200
 
     return "Invalid script link.", 404
 
+# Direct endpoint for obfuscation (API style)
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-
+    
     script_content = request.json.get("script", "")
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
-
+    
     obfuscation_result, success = obfuscate_lua_code(script_content)
     if not success:
         return jsonify(obfuscation_result), 500
-
+        
     return jsonify({"obfuscated_code": obfuscation_result["obfuscated_code"]}), 200
 
 if __name__ == '__main__':
