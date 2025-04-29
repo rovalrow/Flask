@@ -186,7 +186,7 @@ def execute(script_name):
                     </div>
                     <h1>You do not have permission to view these files.</h1>
                     <p>Please close this page and continue to a valid location.</p>
-                    <button class="discord-button" onclick="window.location.href='https://discord.gg/xHXTSFXcUu'">Discord</button>
+                    <button class="discord-button" onclick="window.location.href='https://discord.gg/jdark'">Discord</button>
                     <div class="made-by">Made By: Shinzou</div>
                 </div>
             </body>
