@@ -195,9 +195,9 @@ def execute(script_name):
 
         # If User-Agent is Roblox, send raw Lua script
         with open(script_path, "r", encoding="utf-8") as f:
-            return f.read(), 200
+            return f.read(), 200, {'Content-Type': 'text/plain'}
 
-        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200        
+        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}      
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
