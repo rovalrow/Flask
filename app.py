@@ -87,15 +87,21 @@ def generate():
         return jsonify(obfuscation_result), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
-    script_name = custom_name if custom_name else str(get_next_script_id())
+    base_name = custom_name if custom_name else str(get_next_script_id())
+    script_name = base_name
+    counter = 1
+    while os.path.exists(os.path.join(SCRIPTS_DIR, f"{script_name}.lua")):
+        script_name = f"{base_name}{counter}"
+        counter += 1
+
     script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
 
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
 
-    return jsonify({"link": f"{request.host_url}scriptguardian.shinzou/{script_name}"}), 200
+    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
-@app.route('/scriptguardian.shinzou/<script_name>')
+@app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
 
@@ -180,7 +186,7 @@ def execute(script_name):
                     </div>
                     <h1>You do not have permission to view these files.</h1>
                     <p>Please close this page and continue to a valid location.</p>
-                    <button class="discord-button" onclick="window.location.href='https://discord.gg/SdMXRFPUYx'">Discord</button>
+                    <button class="discord-button" onclick="window.location.href='https://discord.gg/xHXTSFXcUu'">Discord</button>
                     <div class="made-by">Made By: Shinzou</div>
                 </div>
             </body>
@@ -191,7 +197,7 @@ def execute(script_name):
         with open(script_path, "r", encoding="utf-8") as f:
             return f.read(), 200
 
-    return "Invalid script link.", 404
+        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200        
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
@@ -212,3 +218,4 @@ def api_obfuscate():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
+    
