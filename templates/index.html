@@ -145,7 +145,7 @@
             border-radius: 12px;
             text-align: center;
             width: 80%;
-            max-width: 500px;
+            max-width: 600px; /* Increased from 500px */
             box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
             opacity: 0;
             transform: scale(0.8);
@@ -213,6 +213,35 @@
             font-size: 16px;
             text-align: center;
         }
+        
+        .file-upload {
+            position: relative;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .file-upload input[type=file] {
+            position: absolute;
+            top: 0;
+            right: 0;
+            min-width: 100%;
+            min-height: 100%;
+            font-size: 100px;
+            text-align: right;
+            filter: alpha(opacity=0);
+            opacity: 0;
+            outline: none;
+            cursor: pointer;
+            display: block;
+        }
+        
+        .file-notification {
+            margin-top: 5px;
+            color: #00ffea;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+        }
 
         #output {
             margin-top: 15px;
@@ -249,6 +278,14 @@
     <div class="container" id="uiBox">
         <h1>Script Guardian</h1>
         <textarea id="scriptBox" placeholder="Enter Your Roblox Script Here!"></textarea>
+        
+        <!-- File Upload Button -->
+        <div class="file-upload">
+            <button id="uploadButton">Upload Script File</button>
+            <input type="file" id="scriptFile" accept=".txt,.lua,.luau" onchange="handleFileUpload(event)">
+            <p id="fileNotification" class="file-notification">✅ File successfully selected!</p>
+        </div>
+        
         <button onclick="toggleCustomName()">Custom Name</button>
         <div id="customNameContainer">
             <input type="text" id="customNameBox" placeholder="Enter Custom Name Here!">
@@ -287,6 +324,27 @@
             let container = document.getElementById("customNameContainer");
             container.style.display = container.style.display === "block" ? "none" : "block";
         }
+        
+        // Function to handle file upload
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById("scriptBox").value = e.target.result;
+                    
+                    // Show success notification
+                    const notification = document.getElementById("fileNotification");
+                    notification.style.display = "block";
+                    
+                    // Hide notification after 3 seconds
+                    setTimeout(() => {
+                        notification.style.display = "none";
+                    }, 3000);
+                };
+                reader.readAsText(file);
+            }
+        }
 
         let isGenerating = false;
         let countdownTime = localStorage.getItem("countdownTime") 
@@ -303,6 +361,7 @@
                 outputBox.style.display = "block";
             }
 
+            // Only check for countdown if there's an active ban (from profanity)
             if (countdownTime > 0) {
                 startCountdown(generateButton);
             }
@@ -342,11 +401,16 @@
             }
 
             isGenerating = true;
-            countdownTime = 20;
-            localStorage.setItem("countdownTime", countdownTime);
             generateButton.disabled = true;
-            generateButton.textContent = `Wait ${countdownTime}s To Generate Again`;
-
+            
+            // Start the loading animation
+            let loadingDots = 1;
+            const loadingInterval = setInterval(() => {
+                loadingDots = (loadingDots % 3) + 1;
+                let dots = '.'.repeat(loadingDots);
+                generateButton.textContent = `Generating${dots}`;
+            }, 500);
+            
             fetch('/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -354,17 +418,25 @@
             })
             .then(response => response.json())
             .then(data => {
+                // Clear the loading animation
+                clearInterval(loadingInterval);
+                
                 if (data.link) {
                     outputBox.innerHTML = `Link generated:<br>loadstring(game:HttpGet("${data.link}"))()`;
                     outputBox.style.display = "block";
                     localStorage.setItem("generatedLink", data.link);
-                    startCountdown(generateButton);
+                    
+                    // Reset button immediately instead of starting countdown
+                    resetButton(generateButton);
                 } else {
                     alert("Error generating link.");
                     resetButton(generateButton);
                 }
             })
             .catch(error => {
+                // Clear the loading animation
+                clearInterval(loadingInterval);
+                
                 console.error('Error:', error);
                 resetButton(generateButton);
             });
