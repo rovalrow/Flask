@@ -34,26 +34,26 @@ def obfuscate_lua_code(code):
             "apikey": OBFUSCATOR_API_KEY,
             "content-type": "text"
         }
-        
+
         session_response = requests.post(
             NEW_SCRIPT_URL,
             headers=new_script_headers,
             data=code
         )
-        
+
         session_data = session_response.json()
         if session_data.get("message") is not None or not session_data.get("sessionId"):
             return {"error": f"Failed to create obfuscation session: {session_data.get('message', 'Unknown error')}"}, False
-        
+
         session_id = session_data["sessionId"]
-        
+
         # Step 2: Obfuscate the script with enhanced settings
         obfuscate_headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "sessionId": session_id,
             "content-type": "application/json"
         }
-        
+
         # Advanced obfuscation settings for maximum security
         obfuscation_options = {
             "MinifiyAll": True,
@@ -69,19 +69,19 @@ def obfuscate_lua_code(code):
                 "WowPacker": True
             }
         }
-        
+
         obfuscate_response = requests.post(
             OBFUSCATE_URL,
             headers=obfuscate_headers,
             data=json.dumps(obfuscation_options)
         )
-        
+
         obfuscate_data = obfuscate_response.json()
         if obfuscate_data.get("message") is not None or not obfuscate_data.get("code"):
             return {"error": f"Failed to obfuscate code: {obfuscate_data.get('message', 'Unknown error')}"}, False
-        
+
         return {"obfuscated_code": obfuscate_data["code"]}, True
-    
+
     except Exception as e:
         return {"error": f"Obfuscation service error: {str(e)}"}, False
 
@@ -97,15 +97,15 @@ def generate():
 
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
-    
+
     # Process the Lua code through the obfuscator API
     obfuscation_result, success = obfuscate_lua_code(script_content)
-    
+
     if not success:
         return jsonify(obfuscation_result), 500
-    
+
     obfuscated_script = obfuscation_result["obfuscated_code"]
-    
+
     script_name = custom_name if custom_name else str(get_next_script_id())
     script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
 
@@ -124,56 +124,11 @@ def execute(script_name):
 
         # If the client is expecting HTML (browser), block it
         if "text/html" in accept_header:
-            return """
-            <html>
-            <head>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap');
-                    body { 
-                        display: flex; 
-                        flex-direction: column; 
-                        justify-content: center; 
-                        align-items: center; 
-                        height: 100vh; 
-                        margin: 0; 
-                        background-color: #0A0A2A;
-                        font-family: 'Fredoka', sans-serif;
-                    }
-                    h1 { 
-                        font-size: 40px; 
-                        text-align: center; 
-                        color: red; 
-                    }
-                    .discord-button { 
-                        margin-top: 20px;
-                        padding: 12px 24px; 
-                        font-size: 20px; 
-                        background-color: #000000; 
-                        color: white; 
-                        border: none; 
-                        border-radius: 12px; 
-                        cursor: pointer; 
-                        font-family: 'Fredoka', sans-serif;
-                        transition: 0.3s;
-                    }
-                    .discord-button:hover { 
-                        background-color: #222222; 
-                    }
-                    .made-by {
-                        margin-top: 15px;
-                        color: red;
-                        font-size: 18px;
-                        font-family: 'Fredoka', sans-serif;
-                    }
-                </style>
-            </head>
-            <body>
-                <h1>🚫 Unauthorized to see this script. 🚫<br> Close & Proceed.</h1>
-                <button class="discord-button" onclick="window.location.href='https://discord.gg/SdMXRFPUYx'">Discord</button>
-                <div class="made-by">Made By: Shinzou</div>
-            </body>
-            </html>
-            """, 403
+            return render_template("unauthorized.html")
+
+        # If a bot or unknown source is detected, return fake Cloudflare error page
+        if "python" in request.headers.get("User-Agent", "").lower() or "curl" in request.headers.get("User-Agent", "").lower():
+            return render_template("fake_cloudflare_error.html")
 
         # Otherwise, serve the script content (for Roblox HttpGet etc)
         with open(script_path, "r", encoding="utf-8") as f:
@@ -186,15 +141,15 @@ def execute(script_name):
 def api_obfuscate():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-    
+
     script_content = request.json.get("script", "")
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
-    
+
     obfuscation_result, success = obfuscate_lua_code(script_content)
     if not success:
         return jsonify(obfuscation_result), 500
-        
+
     return jsonify({"obfuscated_code": obfuscation_result["obfuscated_code"]}), 200
 
 if __name__ == '__main__':
