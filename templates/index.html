@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Script Guardian</title>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         * {
             margin: 0;
@@ -260,6 +261,13 @@
 </head>
 <body>
 
+<div id="captchaContainer" style="z-index: 20;">
+  <div class="container show">
+    <h1>Verifying You’re Human...</h1>
+    <div class="cf-turnstile" data-sitekey="0x4AAAAAABWfDaHaYbkZVwPK" data-callback="onCaptchaSuccess"></div>
+  </div>
+</div>
+
     <footer>
         <p class="footer-top" id="changingText">The safest way to secure your scripts</p>
         <p class="footer-bottom">Made by: Shinzou | Script Guardian created on March 23, 2025</p>
@@ -275,7 +283,7 @@
         <button>Obfuscation History [Soon]</button>
     </div>
 
-    <div class="container" id="uiBox">
+<div class="container" id="uiBox" style="display: none;">
         <h1>Script Guardian</h1>
         <textarea id="scriptBox" placeholder="Enter Your Roblox Script Here!"></textarea>
         
@@ -499,6 +507,13 @@
         setInterval(createShootingStar, 7000);
 
         createStars(150);
+        
+        function onCaptchaSuccess() {
+    document.getElementById("captchaContainer").style.display = "none";
+    const uiBox = document.getElementById("uiBox");
+    uiBox.style.display = "block";
+    setTimeout(() => uiBox.classList.add("show"), 100);
+}
     </script>
 </body>
 </html>
