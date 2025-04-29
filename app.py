@@ -128,7 +128,7 @@ def execute(script_name):
 
         # If a bot or unknown source is detected, return fake Cloudflare error page
         if "python" in request.headers.get("User-Agent", "").lower() or "curl" in request.headers.get("User-Agent", "").lower():
-            return render_template("fake_cloudflare_error.html")
+            return render_template("cloudflare.html")
 
         # Otherwise, serve the script content (for Roblox HttpGet etc)
         with open(script_path, "r", encoding="utf-8") as f:
