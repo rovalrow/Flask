@@ -1,214 +1,440 @@
-from flask import Flask, request, jsonify, render_template
-import os
-import re
-import requests
-import uuid
-import json
-
-app = Flask(__name__)
-SCRIPTS_DIR = "scripts"
-
-# Create scripts folder if it doesn't exist
-os.makedirs(SCRIPTS_DIR, exist_ok=True)
-
-# Obfuscator API Config
-OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
-NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
-OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
-
-def sanitize_filename(name):
-    return re.sub(r"[^a-zA-Z0-9_-]", "", name)
-
-def get_next_script_id():
-    existing_files = [f.split(".")[0] for f in os.listdir(SCRIPTS_DIR) if f.endswith(".lua")]
-    script_numbers = [int(f) for f in existing_files if f.isdigit()]
-    return max(script_numbers, default=0) + 1
-
-def obfuscate_lua_code(code):
-    try:
-        new_script_headers = {
-            "apikey": OBFUSCATOR_API_KEY,
-            "content-type": "text"
-        }
-        session_response = requests.post(NEW_SCRIPT_URL, headers=new_script_headers, data=code)
-        session_data = session_response.json()
-        if not session_data.get("sessionId"):
-            return {"error": "Failed to create session"}, False
-
-        session_id = session_data["sessionId"]
-
-        obfuscate_headers = {
-            "apikey": OBFUSCATOR_API_KEY,
-            "sessionId": session_id,
-            "content-type": "application/json"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Script Guardian</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        obfuscation_options = {
-            "MinifiyAll": True,
-            "Virtualize": True,
-            "Seed": str(uuid.uuid4().int)[:8],
-            "CustomPlugins": {
-                "CachedEncryptStrings": True,
-                "CallRetAssignment": True,
-                "ControlFlowFlattenV2AllBlocks": True,
-                "DummyFunctionArgs": True,
-                "FuncChopper": True,
-                "Minifier2": True,
-                "WowPacker": True
+        body {
+            font-family: Arial, sans-serif;
+            background: #020c1b;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .top-buttons {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+        }
+
+        .top-buttons button {
+            background: black;
+            color: white;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 14px 30px;
+            width: 200px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+            text-align: center;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.8);
+        }
+
+        .top-buttons button:hover {
+            background: #0a0a0a;
+            box-shadow: 0 0 20px cyan;
+        }
+
+        footer {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            font-family: 'Fredoka', sans-serif;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            width: max-content;
+        }
+
+        .footer-top {
+            font-size: 16px;
+            font-weight: 600;
+            color: #00ffea;
+            margin-bottom: 5px;
+            transition: opacity 1s ease-in-out;
+        }
+
+        .footer-bottom {
+            font-size: 14px;
+            font-weight: 400;
+            color: #cccccc;
+        }
+
+        .footer-powered {
+            font-size: 13px;
+            color: #888;
+            margin-top: 3px;
+        }
+
+        .stars, .meteors, .shooting-stars {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: moveStar linear infinite;
+        }
+
+        @keyframes moveStar {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(100vh); opacity: 0; }
+        }
+
+        .shooting-star {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: white;
+            box-shadow: 0 0 10px white;
+            border-radius: 50%;
+            animation: shootingStar linear 2s;
+        }
+
+        @keyframes shootingStar {
+            0% { transform: translateX(100vw) translateY(-50px); opacity: 1; }
+            100% { transform: translateX(-10vw) translateY(50vh); opacity: 0; }
+        }
+
+        .meteor {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background: orange;
+            box-shadow: 0 0 15px orange;
+            border-radius: 50%;
+            animation: meteorFall linear 3s;
+        }
+
+        @keyframes meteorFall {
+            0% { transform: translateX(100vw) translateY(-10vh); opacity: 1; }
+            100% { transform: translateX(-10vw) translateY(100vh); opacity: 0; }
+        }
+
+        .container {
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            width: 80%;
+            max-width: 500px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+            opacity: 0;
+            transform: scale(0.8);
+            transition: opacity 1s ease, transform 1s ease;
+            position: relative;
+            z-index: 10;
+        }
+
+        .show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        h1 {
+            font-size: 26px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px cyan;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            background-color: #111;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            resize: none;
+            outline: none;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: linear-gradient(45deg, #3a7bd5, #00d2ff);
+            box-shadow: 0 0 15px cyan;
+        }
+
+        #customNameContainer {
+            display: none;
+            margin-top: 10px;
+        }
+
+        #customNameBox {
+            width: 100%;
+            padding: 10px;
+            background-color: #222;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            outline: none;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        #output {
+            margin-top: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #00ffea;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <footer>
+        <p class="footer-top" id="changingText">The safest way to secure your scripts</p>
+        <p class="footer-bottom">Made by: Shinzou | Script Guardian created on March 23, 2025</p>
+        <p class="footer-powered">Powered by Replit</p>
+    </footer>
+
+  <div class="stars"></div>
+    <div class="meteors"></div>
+    <div class="shooting-stars"></div>
+
+    <div class="top-buttons">
+        <button onclick="window.location.href='https://discord.gg/neBEfZvVpD'">Discord</button>
+        <button>Obfuscation History [Soon]</button>
+    </div>
+
+    <div class="container" id="uiBox">
+        <h1>Script Guardian</h1>
+        <textarea id="scriptBox" placeholder="Enter Your Roblox Script Here!"></textarea>
+        <button onclick="toggleCustomName()">Custom Name</button>
+        <div id="customNameContainer">
+            <input type="text" id="customNameBox" placeholder="Enter Custom Name Here!">
+        </div>
+        <button onclick="generateLink()">Generate</button>
+        <p id="output"></p>
+    </div>
+
+    <script>
+    setTimeout(() => {
+        document.getElementById("uiBox")?.classList.add("show");
+    }, 3000);
+
+    const texts = [
+        "✨ The Ultimate 🔒 Protection for Your Scripts! ✨",
+        "🔧 Seamless Integration – Simply upload your script, click once, and get a secure, shareable link!",
+        "🔒 Unmatched Security – Your scripts are safely stored.",
+        "🚀 Lightning-Fast Performance – Our multi-server architecture guarantees flawless execution with a 0% error rate!"
+    ];
+
+    let index = 0;
+    function changeText() {
+        let textElement = document.getElementById("changingText");
+        textElement.style.opacity = "0";
+        setTimeout(() => {
+            textElement.textContent = texts[index];
+            textElement.style.opacity = "1";
+            index = (index + 1) % texts.length;
+        }, 1000);
+    }
+    setInterval(changeText, 10000);
+
+    function toggleCustomName() {
+        let container = document.getElementById("customNameContainer");
+        container.style.display = container.style.display === "block" ? "none" : "block";
+    }
+
+    let isGenerating = false;
+    let loadingInterval;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        let savedLink = localStorage.getItem("generatedLink");
+        let outputBox = document.getElementById("output");
+        if (savedLink) {
+            outputBox.innerHTML = `Link generated:<br>loadstring(game:HttpGet("${savedLink}"))()`;
+            outputBox.style.display = "block";
+        }
+
+        // Handle suspension on load
+        const bannedUntil = localStorage.getItem("bannedUntil");
+        if (bannedUntil && Date.now() < parseInt(bannedUntil)) {
+            disableButtonForBan();
+        }
+    });
+
+    async function checkProfanity(text) {
+        try {
+            let response = await fetch(`https://www.purgomalum.com/service/containsprofanity?text=${encodeURIComponent(text)}`);
+            let isProfane = await response.text();
+            return isProfane === "true";
+        } catch (error) {
+            console.error("Error checking profanity:", error);
+            return false;
+        }
+    }
+
+    async function generateLink() {
+        if (isGenerating) return;
+
+        const bannedUntil = localStorage.getItem("bannedUntil");
+        if (bannedUntil && Date.now() < parseInt(bannedUntil)) return;
+
+        let scriptContent = document.getElementById("scriptBox").value.trim();
+        let customName = document.getElementById("customNameBox").value.trim();
+        let outputBox = document.getElementById("output");
+        let generateButton = document.querySelector('button[onclick="generateLink()"]');
+
+        if (!scriptContent) {
+            alert("Please enter a script.");
+            return;
+        }
+
+        let isProfane = await checkProfanity(customName);
+        if (isProfane) {
+            alert("Inappropriate name detected! You are suspended for 1 day.");
+            let bannedUntil = Date.now() + 86400000; // 1 day in ms
+            localStorage.setItem("bannedUntil", bannedUntil.toString());
+            disableButtonForBan();
+            return;
+        }
+
+        isGenerating = true;
+        generateButton.disabled = true;
+
+        // Animate "Generating..." dots
+        let dots = 1;
+        generateButton.textContent = "Generating.";
+        loadingInterval = setInterval(() => {
+            dots = (dots % 3) + 1;
+            generateButton.textContent = "Generating" + ".".repeat(dots);
+        }, 500);
+
+        try {
+            let response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: scriptContent, name: customName })
+            });
+
+            let data = await response.json();
+
+            if (data.link) {
+                outputBox.innerHTML = `Link generated:<br>loadstring(game:HttpGet("${data.link}"))()`;
+                outputBox.style.display = "block";
+                localStorage.setItem("generatedLink", data.link);
+            } else {
+                alert("Error generating link.");
             }
+        } catch (error) {
+            console.error('Error:', error);
+            alert("An error occurred while generating.");
         }
 
-        obfuscate_response = requests.post(OBFUSCATE_URL, headers=obfuscate_headers, data=json.dumps(obfuscation_options))
-        obfuscate_data = obfuscate_response.json()
-        if not obfuscate_data.get("code"):
-            return {"error": "Failed to obfuscate code"}, False
+        resetButton(generateButton);
+    }
 
-        return {"obfuscated_code": obfuscate_data["code"]}, True
+    function resetButton(button) {
+        clearInterval(loadingInterval);
+        isGenerating = false;
+        button.disabled = false;
+        button.textContent = "Generate";
+    }
 
-    except Exception as e:
-        return {"error": str(e)}, False
+    function disableButtonForBan() {
+        let button = document.querySelector('button[onclick="generateLink()"]');
+        button.disabled = true;
+        button.textContent = "Suspended: 1 Day";
 
-@app.route('/')
-def home():
-    return render_template("index.html")
+        // Optional: recheck after time ends
+        const checkBanInterval = setInterval(() => {
+            let bannedUntil = localStorage.getItem("bannedUntil");
+            if (!bannedUntil || Date.now() >= parseInt(bannedUntil)) {
+                clearInterval(checkBanInterval);
+                localStorage.removeItem("bannedUntil");
+                button.disabled = false;
+                button.textContent = "Generate";
+            }
+        }, 10000); // Check every 10 seconds
+    }
 
-@app.route('/generate', methods=['POST'])
-def generate():
-    data = request.json
-    script_content = data.get("script", "").strip()
-    custom_name = sanitize_filename(data.get("name", "").strip())
+    function createStars(count) {
+        let starsContainer = document.querySelector(".stars");
+        for (let i = 0; i < count; i++) {
+            let star = document.createElement("div");
+            star.classList.add("star");
+            let size = Math.random() * 3 + 1;
+            star.style.width = `${size}px`;
+            star.style.height = `${size}px`;
+            star.style.left = `${Math.random() * 100}vw`;
+            star.style.top = `${Math.random() * 100}vh`;
+            star.style.animationDuration = `${Math.random() * 5 + 5}s`;
+            star.style.animationDelay = `${Math.random() * 5}s`;
+            starsContainer.appendChild(star);
+        }
+    }
 
-    if not script_content:
-        return jsonify({"error": "No script provided"}), 400
+    function createMeteor() {
+        let meteor = document.createElement("div");
+        meteor.classList.add("meteor");
+        meteor.style.left = `${Math.random() * 100}vw`;
+        document.querySelector(".meteors").appendChild(meteor);
+        setTimeout(() => meteor.remove(), 3000);
+    }
+    setInterval(createMeteor, 10000);
 
-    obfuscation_result, success = obfuscate_lua_code(script_content)
+    function createShootingStar() {
+        let star = document.createElement("div");
+        star.classList.add("shooting-star");
+        star.style.right = "0";
+        star.style.top = `${Math.random() * 100}vh`;
+        document.querySelector(".shooting-stars").appendChild(star);
+        setTimeout(() => star.remove(), 2000);
+    }
+    setInterval(createShootingStar, 7000);
 
-    if not success:
-        return jsonify(obfuscation_result), 500
-
-    obfuscated_script = obfuscation_result["obfuscated_code"]
-    script_name = custom_name if custom_name else str(get_next_script_id())
-    script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
-
-    with open(script_path, "w", encoding="utf-8") as f:
-        f.write(obfuscated_script)
-
-    return jsonify({"link": f"{request.host_url}scriptguardian.shinzou/{script_name}"}), 200
-
-@app.route('/scriptguardian.shinzou/<script_name>')
-def execute(script_name):
-    script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
-
-    if os.path.exists(script_path):
-        user_agent = request.headers.get("User-Agent", "").lower()
-
-        # Check if request is NOT from Roblox
-        if not ("roblox" in user_agent or "robloxapp" in user_agent):
-            # Serve the Unauthorized HTML
-            return """
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta content="width=device-width,initial-scale=1" name="viewport">
-                <title>Unauthorized</title>
-                <style>
-                    body {
-                        margin: 0;
-                        font-family: Roboto, Arial, sans-serif;
-                        background-color: #1a1e30;
-                        color: #fff;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        height: 100vh;
-                    }
-                    .container {
-                        text-align: center;
-                        padding: 20px;
-                        background: rgba(255, 255, 255, 0);
-                        border-radius: 10px;
-                        box-shadow: 0 8px 15px transparent;
-                    }
-                    .brand {
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        margin-bottom: 20px;
-                    }
-                    .brand-text {
-                        font-size: 18px;
-                        font-weight: 600;
-                        color: #fff;
-                        margin-top: 5px;
-                    }
-                    h1 {
-                        font-size: 24px;
-                        margin-bottom: 10px;
-                    }
-                    p {
-                        font-size: 16px;
-                        color: #d1d1d1;
-                    }
-                    .discord-button { 
-                        margin-top: 20px;
-                        padding: 12px 24px; 
-                        font-size: 20px; 
-                        background-color: #000000; 
-                        color: white; 
-                        border: none; 
-                        border-radius: 12px; 
-                        cursor: pointer; 
-                        font-family: 'Fredoka', sans-serif;
-                        transition: 0.3s;
-                    }
-                    .discord-button:hover { 
-                        background-color: #222222; 
-                    }
-                    .made-by {
-                        margin-top: 15px;
-                        color: red;
-                        font-size: 18px;
-                        font-family: 'Fredoka', sans-serif;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="brand">
-                        <div class="brand-text">⛔ Access Denied ⛔</div>
-                    </div>
-                    <h1>You do not have permission to view these files.</h1>
-                    <p>Please close this page and continue to a valid location.</p>
-                    <button class="discord-button" onclick="window.location.href='https://discord.gg/SdMXRFPUYx'">Discord</button>
-                    <div class="made-by">Made By: Shinzou</div>
-                </div>
-            </body>
-            </html>
-            """, 403
-
-        # If User-Agent is Roblox, send raw Lua script
-        with open(script_path, "r", encoding="utf-8") as f:
-            return f.read(), 200
-
-    return "Invalid script link.", 404
-
-@app.route('/api/obfuscate', methods=['POST'])
-def api_obfuscate():
-    if not request.is_json:
-        return jsonify({"error": "Request must be JSON"}), 400
-
-    script_content = request.json.get("script", "")
-    if not script_content:
-        return jsonify({"error": "No script provided"}), 400
-
-    obfuscation_result, success = obfuscate_lua_code(script_content)
-
-    if not success:
-        return jsonify(obfuscation_result), 500
-
-    return jsonify({"obfuscated_code": obfuscation_result["obfuscated_code"]}), 200
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    createStars(150);
+</script>
+</body>
+</html>
