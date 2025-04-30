@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, make_response
 import os
 import re
 import requests
@@ -17,11 +17,6 @@ OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
-
-def get_next_script_id():
-    existing_files = [f.split(".")[0] for f in os.listdir(SCRIPTS_DIR) if f.endswith(".lua")]
-    script_numbers = [int(f) for f in existing_files if f.isdigit()]
-    return max(script_numbers, default=0) + 1
 
 def obfuscate_lua_code(code):
     try:
@@ -116,7 +111,15 @@ def execute(script_name):
         return 'game.Players.LocalPlayer:Kick("The script no longer exists. Please regenerate at scriptguardian.onrender.com")', 404, {'Content-Type': 'text/plain'}
 
     if is_spoofed(request):
-        return 'print("Hello Spoofer!")', 200, {'Content-Type': 'text/plain'}
+        # Return Lua for spoofers AND render unauthorized page
+        lua_response = make_response('print("Hello Spoofer!")')
+        lua_response.headers["Content-Type"] = "text/plain"
+
+        # Also show unauthorized.html if it’s a browser
+        if "text/html" in request.headers.get("Accept", ""):
+            return render_template("unauthorized.html"), 403
+
+        return lua_response
 
     with open(script_path, "r", encoding="utf-8") as f:
         return f.read(), 200, {'Content-Type': 'text/plain'}
