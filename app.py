@@ -6,14 +6,11 @@ import uuid
 import json
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Add your own secure key here
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")
 
 SCRIPTS_DIR = "scripts"
-
-# Create scripts folder if it doesn't exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
-# Obfuscator API Config
 OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
@@ -38,7 +35,6 @@ def obfuscate_lua_code(code):
             return {"error": "Failed to create session"}, False
 
         session_id = session_data["sessionId"]
-
         obfuscate_headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "sessionId": session_id,
@@ -69,6 +65,15 @@ def obfuscate_lua_code(code):
 
     except Exception as e:
         return {"error": str(e)}, False
+
+def is_spoofed(request):
+    ua = request.headers.get("User-Agent", "").lower()
+    if "roblox" not in ua and "robloxapp" not in ua:
+        return True
+    for header in request.headers:
+        if header.lower().startswith("x-") and header.lower() != "x-forwarded-for":
+            return True
+    return False
 
 @app.route('/')
 def home():
@@ -107,19 +112,14 @@ def generate():
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
 
-    if os.path.exists(script_path):
-        user_agent = request.headers.get("User-Agent", "").lower()
+    if not os.path.exists(script_path):
+        return 'game.Players.LocalPlayer:Kick("The script no longer exists. Please regenerate at scriptguardian.onrender.com")', 404, {'Content-Type': 'text/plain'}
 
-        # Check if request is NOT from Roblox
-        if not ("roblox" in user_agent or "robloxapp" in user_agent):
-            # Serve the Unauthorized HTML
-            return render_template("unauthorized.html"), 403
+    if is_spoofed(request):
+        return 'print("Hello Spoofer!")', 200, {'Content-Type': 'text/plain'}
 
-        # If User-Agent is Roblox, send raw Lua script
-        with open(script_path, "r", encoding="utf-8") as f:
-            return f.read(), 200, {'Content-Type': 'text/plain'}
-
-        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}      
+    with open(script_path, "r", encoding="utf-8") as f:
+        return f.read(), 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
@@ -140,4 +140,3 @@ def api_obfuscate():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-    
