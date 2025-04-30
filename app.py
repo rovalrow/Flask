@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 import os
 import re
 import requests
@@ -6,25 +6,20 @@ import uuid
 import json
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Add your own secure key here
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")
 
 SCRIPTS_DIR = "scripts"
+RAW_DIR = os.path.join(SCRIPTS_DIR, "raw")
 
-# Create scripts folder if it doesn't exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
+os.makedirs(RAW_DIR, exist_ok=True)
 
-# Obfuscator API Config
 OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
-
-def get_next_script_id():
-    existing_files = [f.split(".")[0] for f in os.listdir(SCRIPTS_DIR) if f.endswith(".lua")]
-    script_numbers = [int(f) for f in existing_files if f.isdigit()]
-    return max(script_numbers, default=0) + 1
 
 def obfuscate_lua_code(code):
     try:
@@ -38,13 +33,11 @@ def obfuscate_lua_code(code):
             return {"error": "Failed to create session"}, False
 
         session_id = session_data["sessionId"]
-
         obfuscate_headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "sessionId": session_id,
             "content-type": "application/json"
         }
-
         obfuscation_options = {
             "MinifiyAll": True,
             "Virtualize": True,
@@ -59,14 +52,11 @@ def obfuscate_lua_code(code):
                 "WowPacker": True
             }
         }
-
         obfuscate_response = requests.post(OBFUSCATE_URL, headers=obfuscate_headers, data=json.dumps(obfuscation_options))
         obfuscate_data = obfuscate_response.json()
         if not obfuscate_data.get("code"):
             return {"error": "Failed to obfuscate code"}, False
-
         return {"obfuscated_code": obfuscate_data["code"]}, True
-
     except Exception as e:
         return {"error": str(e)}, False
 
@@ -84,7 +74,6 @@ def generate():
         return jsonify({"error": "No script provided"}), 400
 
     obfuscation_result, success = obfuscate_lua_code(script_content)
-
     if not success:
         return jsonify(obfuscation_result), 500
 
@@ -92,52 +81,62 @@ def generate():
     base_name = custom_name if custom_name else uuid.uuid4().hex
     script_name = base_name
     counter = 1
-    while os.path.exists(os.path.join(SCRIPTS_DIR, f"{script_name}.lua")):
+    while os.path.exists(os.path.join(SCRIPTS_DIR, f"{script_name}.lua")) or os.path.exists(os.path.join(RAW_DIR, f"{script_name}.lua")):
         script_name = f"{base_name}{counter}"
         counter += 1
 
-    script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
-
-    with open(script_path, "w", encoding="utf-8") as f:
+    raw_path = os.path.join(RAW_DIR, f"{script_name}.lua")
+    with open(raw_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
+
+    # Loader stub
+    loader_code = f'''
+local url = "{request.host_url}scriptguardian/files/scripts/raw/{script_name}"
+local s = game:HttpGet(url)
+local f = loadstring(s)
+if f then
+    f()
+end
+'''.strip()
+
+    loader_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
+    with open(loader_path, "w", encoding="utf-8") as f:
+        f.write(loader_code)
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
-def execute(script_name):
+def serve_loader(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
-
     if os.path.exists(script_path):
         user_agent = request.headers.get("User-Agent", "").lower()
-
-        # Check if request is NOT from Roblox
         if not ("roblox" in user_agent or "robloxapp" in user_agent):
-            # Serve the Unauthorized HTML
             return render_template("unauthorized.html"), 403
+        return send_file(script_path, mimetype='text/plain')
+    return 'game.Players.LocalPlayer:Kick("The script does not exist. Regenerate it at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}
 
-        # If User-Agent is Roblox, send raw Lua script
-        with open(script_path, "r", encoding="utf-8") as f:
-            return f.read(), 200, {'Content-Type': 'text/plain'}
-
-        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}      
+@app.route('/scriptguardian/files/scripts/raw/<script_name>')
+def serve_raw(script_name):
+    script_path = os.path.join(RAW_DIR, f"{sanitize_filename(script_name)}.lua")
+    if os.path.exists(script_path):
+        user_agent = request.headers.get("User-Agent", "").lower()
+        if not ("roblox" in user_agent or "robloxapp" in user_agent):
+            return render_template("unauthorized.html"), 403
+        return send_file(script_path, mimetype='text/plain')
+    return '', 404
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-
     script_content = request.json.get("script", "")
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
-
     obfuscation_result, success = obfuscate_lua_code(script_content)
-
     if not success:
         return jsonify(obfuscation_result), 500
-
     return jsonify({"obfuscated_code": obfuscation_result["obfuscated_code"]}), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-    
