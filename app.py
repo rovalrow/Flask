@@ -107,29 +107,32 @@ def generate():
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
 
-    if not os.path.exists(script_path):
-        return 'game.Players.LocalPlayer:Kick("The script you are trying to run no longer exists. Please regenerate it at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}
+    if os.path.exists(script_path):
+        user_agent = request.headers.get("User-Agent", "").lower()
 
-    user_agent = request.headers.get("User-Agent", "").lower()
+        # List of blocked user agents
+        blocked_user_agents = [
+            "curl/8.13.0",
+            "wget/1.25.0",
+            "httpie/3.2.4",
+            "python-requests/2.32.3"
+        ]
 
-    # Check if User-Agent is not from Roblox
-    if not ("roblox" in user_agent or "robloxapp" in user_agent):
-        return render_template("unauthorized.html"), 403
-
-    try:
-        # Try to fetch the IP using ipinfo.io
-        ip_response = requests.get("https://ipinfo.io/ip", timeout=3)
-        user_ip = ip_response.text.strip()
-
-        if not user_ip:
+        # Check if user agent matches any blocked user agents or contains "termux"
+        if any(ua.lower() == user_agent for ua in blocked_user_agents) or "termux" in user_agent:
             return render_template("unauthorized.html"), 403
-    except Exception:
+
+        # Check if request is from Roblox
+        if "roblox" in user_agent or "robloxapp" in user_agent:
+            # Serve the raw Lua script
+            with open(script_path, "r", encoding="utf-8") as f:
+                return f.read(), 200, {'Content-Type': 'text/plain'}
+
+        # If not Roblox, serve unauthorized page
         return render_template("unauthorized.html"), 403
 
-    # If everything checks out, return the script
-    with open(script_path, "r", encoding="utf-8") as f:
-        return f.read(), 200, {'Content-Type': 'text/plain'}
-        
+    return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}
+
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
@@ -149,5 +152,3 @@ def api_obfuscate():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-    
-    
