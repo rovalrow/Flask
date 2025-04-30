@@ -4,80 +4,35 @@ import re
 import requests
 import uuid
 import json
-from datetime import datetime, timedelta
-import hmac
-import hashlib
-import base64
-from functools import wraps
-from collections import defaultdict
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Replace with a strong secret key
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Add your own secure key here
 
 SCRIPTS_DIR = "scripts"
-TOKENS = {}  # In-memory token storage (use a database for production)
-RATE_LIMITS = defaultdict(list)  # In-memory rate limiting (use Redis for production)
 
-# Create scripts folder if it doesn’t exist
+# Create scripts folder if it doesn't exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
 # Obfuscator API Config
-OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")  # Replace with your API key
+OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
-
-# Rate limiting configuration
-RATE_LIMIT_REQUESTS = 10  # Max requests per minute
-RATE_LIMIT_WINDOW = 60  # 1 minute in seconds
-
-# Generate a secure HMAC token
-def generate_secure_token(script_name):
-    key = app.secret_key.encode('utf-8')
-    message = f"{script_name}:{datetime.now().timestamp()}".encode('utf-8')
-    token = hmac.new(key, message, hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(token).decode('utf-8')
-
-# Validate a secure token
-def validate_secure_token(token, script_name):
-    try:
-        key = app.secret_key.encode('utf-8')
-        # We need to account for token expiration when validating
-        # Since the timestamp is part of the message, we can’t validate without it
-        # Instead, we’ll rely on the token being present in TOKENS and check expiration there
-        return token in TOKENS and TOKENS[token]["script_name"] == script_name
-    except Exception:
-        return False
-
-# Rate limiting decorator
-def rate_limit(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        ip = request.remote_addr
-        now = datetime.now().timestamp()
-        RATE_LIMITS[ip] = [t for t in RATE_LIMITS[ip] if now - t < RATE_LIMIT_WINDOW]
-        if len(RATE_LIMITS[ip]) >= RATE_LIMIT_REQUESTS:
-            return jsonify({"error": "Rate limit exceeded"}), 429
-        RATE_LIMITS[ip].append(now)
-        return f(*args, **kwargs)
-    return decorated_function
-
-# Check if the request is likely from Roblox
-def is_roblox_request():
-    user_agent = request.headers.get("User-Agent", "").lower()
-    # Common Roblox User-Agent patterns
-    roblox_patterns = ["roblox", "robloxapp", "roblox/win", "roblox/ios", "roblox/android"]
-    return any(pattern in user_agent for pattern in roblox_patterns)
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
 
+def get_next_script_id():
+    existing_files = [f.split(".")[0] for f in os.listdir(SCRIPTS_DIR) if f.endswith(".lua")]
+    script_numbers = [int(f) for f in existing_files if f.isdigit()]
+    return max(script_numbers, default=0) + 1
+
 def obfuscate_lua_code(code):
     try:
-        headers = {
+        new_script_headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "content-type": "text"
         }
-        session_response = requests.post(NEW_SCRIPT_URL, headers=headers, data=code)
+        session_response = requests.post(NEW_SCRIPT_URL, headers=new_script_headers, data=code)
         session_data = session_response.json()
         if not session_data.get("sessionId"):
             return {"error": "Failed to create session"}, False
@@ -117,10 +72,9 @@ def obfuscate_lua_code(code):
 
 @app.route('/')
 def home():
-    return render_template("index.html")  # You’ll need an index.html for the frontend
+    return render_template("index.html")
 
 @app.route('/generate', methods=['POST'])
-@rate_limit
 def generate():
     data = request.json
     script_content = data.get("script", "").strip()
@@ -130,6 +84,7 @@ def generate():
         return jsonify({"error": "No script provided"}), 400
 
     obfuscation_result, success = obfuscate_lua_code(script_content)
+
     if not success:
         return jsonify(obfuscation_result), 500
 
@@ -142,50 +97,31 @@ def generate():
         counter += 1
 
     script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
+
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
 
-    # Generate a secure token
-    token = generate_secure_token(script_name)
-
-    # Store the token with expiration
-    expiration = datetime.now() + timedelta(minutes=10)  # Token expires in 10 minutes
-    TOKENS[token] = {"script_name": script_name, "expiration": expiration}
-
-    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}?token={token}"}), 200
+    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
-@rate_limit
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
 
-    if not os.path.exists(script_path):
-        return 'game.Players.LocalPlayer:Kick("Script not found. Regenerate at scriptguardian.onrender.com")', 200, {'Content-Type': 'text/plain'}
+    if os.path.exists(script_path):
+        user_agent = request.headers.get("User-Agent", "").lower()
 
-    # Check token
-    provided_token = request.args.get('token')
-    if not provided_token or not validate_secure_token(provided_token, script_name):
-        return render_template("unauthorized.html"), 403
+        # Check if request is NOT from Roblox
+        if not ("roblox" in user_agent or "robloxapp" in user_agent):
+            # Serve the Unauthorized HTML
+            return render_template("unauthorized.html"), 403
 
-    # Validate token expiration
-    token_data = TOKENS[provided_token]
-    if datetime.now() > token_data["expiration"]:
-        del TOKENS[provided_token]
-        return render_template("unauthorized.html"), 403
+        # If User-Agent is Roblox, send raw Lua script
+        with open(script_path, "r", encoding="utf-8") as f:
+            return f.read(), 200, {'Content-Type': 'text/plain'}
 
-    if token_data["script_name"] != script_name:
-        return render_template("unauthorized.html"), 403
-
-    # Check if the request is from Roblox
-    if not is_roblox_request():
-        return render_template("unauthorized.html"), 403
-
-    # Serve the script if all checks pass
-    with open(script_path, "r", encoding="utf-8") as f:
-        return f.read(), 200, {'Content-Type': 'text/plain'}
+        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}      
 
 @app.route('/api/obfuscate', methods=['POST'])
-@rate_limit
 def api_obfuscate():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
@@ -195,6 +131,7 @@ def api_obfuscate():
         return jsonify({"error": "No script provided"}), 400
 
     obfuscation_result, success = obfuscate_lua_code(script_content)
+
     if not success:
         return jsonify(obfuscation_result), 500
 
@@ -203,3 +140,4 @@ def api_obfuscate():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
+    
