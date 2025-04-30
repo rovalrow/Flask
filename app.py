@@ -466,41 +466,38 @@ def generate():
     if not success:
         return jsonify(obfuscation_result), 500
 
-    obfuscated_script = obfuscation_result["obfuscated_code"]
-    
-    # Step 2: Generate a unique script ID
+    obfuscated_code = obfuscation_result["obfuscated_code"]
+
+    # Step 2: Encrypt the obfuscated script
     script_id = generate_script_id()
-    
-    # Step 3: Create a loader script
-    loader_script = create_loader_script(script_id)
-    
-    # Step 4: Save the loader script
-    loader_path = os.path.join(LOADERS_DIR, f"{script_id}.lua")
-    with open(loader_path, "w", encoding="utf-8") as f:
-        f.write(loader_script)
-    
-    # Step 5: Save the obfuscated script
-    script_path = os.path.join(SCRIPTS_DIR, f"{script_id}.lua")
-    with open(script_path, "w", encoding="utf-8") as f:
-        f.write(obfuscated_script)
-    
-    # Step 6: Generate an auth key for this script
-    auth_key = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
-    auth_path = os.path.join(AUTH_DIR, f"{script_id}.key")
-    with open(auth_path, "w", encoding="utf-8") as f:
-        f.write(auth_key)
-    
-    # Step 7: Store script metadata
+    encrypted_script = encrypt_script(obfuscated_code, script_id)
+
+    # Step 3: Save encrypted script
+    script_filename = f"{script_id}.lua"
+    with open(os.path.join(SCRIPTS_DIR, script_filename), "w", encoding="utf-8") as f:
+        f.write(encrypted_script)
+
+    # Step 4: Create secure loader script
+    loader_code = create_loader_script(script_id)
+    loader_filename = f"{script_id}_loader.lua"
+    with open(os.path.join(LOADERS_DIR, loader_filename), "w", encoding="utf-8") as f:
+        f.write(loader_code)
+
+    # Step 5: Store metadata
     SCRIPT_REGISTRY[script_id] = {
-        "created_at": time.time(),
-        "name": custom_name if custom_name else script_id,
-        "auth_key": auth_key
+        "original_name": custom_name,
+        "timestamp": time.time(),
+        "loader_filename": loader_filename
     }
-    
+
     return jsonify({
-        "link": f"{request.host_url}files/v3/loaders/{script_id}.lua",
-        "script_id": script_id
+        "script_id": script_id,
+        "loader_filename": loader_filename,
+        "message": "Script generated and protected successfully."
     }), 200
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
 @app.route('/files/v3/loaders/<script_id>.lua')
 def serve_loader(script_id):
