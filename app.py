@@ -594,102 +594,97 @@ def auth_init(instance, script_id):
     time.sleep(random.uniform(0.1, 0.3))
     
     return encrypted_response, 200, {'Content-Type': 'text/plain'}
-
+    
 @app.route('/<instance>/v8/script/<script_id>')
 def serve_encrypted_script(instance, script_id):
     """Serve the encrypted script with advanced security measures"""
-    # Check for valid instance
     if not any(instance.startswith(inst.split('.')[0]) for inst in AUTH_INSTANCES):
-        # Return fake data to confuse attackers
         fake_script = ''.join(random.choices("EGaQJkOG7JaOJ0bE7TaOJ0O17E7lJ0OEGb", k=random.randint(200, 500)))
         return fake_script, 200, {'Content-Type': 'text/plain'}
-    
-    # Get client information for verification
+
     client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     user_agent = request.headers.get('User-Agent', '')
     
-    # Verify the script exists
     script_path = os.path.join(SCRIPTS_DIR, f"{script_id}.lua")
     if not os.path.exists(script_path):
-        # Return fake data instead of error to prevent enumeration
         fake_script = ''.join(random.choices("EGaQJkOG7JaOJ0bE7TaOJ0O17E7lJ0OEGb", k=random.randint(200, 500)))
         return fake_script, 200, {'Content-Type': 'text/plain'}
     
-    # Validate session in registry
     script_data = SCRIPT_REGISTRY.get(script_id, {})
     session_key = script_data.get("session_key")
     
     if not session_key:
-        # Return fake data if no valid session
         fake_script = ''.join(random.choices("EGaQJkOG7JaOJ0bE7TaOJ0O17E7lJ0OEGb", k=random.randint(200, 500)))
         return fake_script, 200, {'Content-Type': 'text/plain'}
     
-    # Security check: Verify the IP and user agent match what was used to get the auth token
     if script_data.get("ip") != client_ip or script_data.get("user_agent") != user_agent:
-        # If mismatch, return fake data to prevent session hijacking
         fake_script = ''.join(random.choices("EGaQJkOG7JaOJ0bE7TaOJ0O17E7lJ0OEGb", k=random.randint(200, 500)))
         return fake_script, 200, {'Content-Type': 'text/plain'}
     
-    # Check timestamp for session expiration (2 minutes max)
     timestamp = int(script_data.get("timestamp", 0))
     if int(time.time()) - timestamp > 120:
-        # Expired session, return fake data
         fake_script = ''.join(random.choices("EGaQJkOG7JaOJ0bE7TaOJ0O17E7lJ0OEGb", k=random.randint(200, 500)))
         return fake_script, 200, {'Content-Type': 'text/plain'}
     
-    # Limit requests per session to prevent brute forcing
     access_count = script_data.get("access_count", 0)
     if access_count > 5:
-        # Too many requests, return fake data
         fake_script = ''.join(random.choices("EGaQJkOG7JaOJ0bE7TaOJ0O17E7lJ0OEGb", k=random.randint(200, 500)))
         return fake_script, 200, {'Content-Type': 'text/plain'}
     
-    # Update access count
     SCRIPT_REGISTRY[script_id]["access_count"] = access_count + 1
-    
-    # Read the script content
+
     with open(script_path, "r", encoding="utf-8") as f:
         script_content = f.read()
-    
-    # Add VM detection code to the script
+
     vm_detection = '''
-    -- VM Detection
-    local function checkVM()
-        local env = getfenv(0)
-        if env._VERSION ~= "Lua 5.1" then
+-- VM Detection
+local function checkVM()
+    local env = getfenv(0)
+    if env._VERSION ~= "Lua 5.1" then
+        return false
+    end
+    local suspicious = {"loadstring", "getfenv", "setfenv"}
+    for _, v in ipairs(suspicious) do
+        if not env[v] or type(env[v]) ~= "function" then
             return false
         end
-        
-        -- Check for sandbox artifacts
-        local suspicious = {"loadstring", "getfenv", "setfenv"}
-        for _, v in ipairs(suspicious) do
-            if not env[v] or type(env[v]) ~= "function" then
-                return false
+    end
+    return true
+end
+
+if not checkVM() then
+    return error("Unauthorized execution environment")
+end
+'''
+
+    anti_debug = '''
+-- Anti-debugging
+local origFunc = debug.getregistry
+debug.getregistry = function()
+    return error("Debugger detected")
+end
+
+-- Self-destructing variables
+local _metadata = {}
+setmetatable(_metadata, {
+    __gc = function()
+        for k, v in pairs(_G) do
+            if type(v) == "function" then
+                _G[k] = nil
             end
         end
-        
-        return true
+        error("Environment destroyed")
     end
-    
-    if not checkVM() then
-        return error("Unauthorized execution environment")
-    end
-    '''
-    
-    # Add anti-debugging code
-    anti_debug = '''
-    -- Anti-debugging
-    local origFunc = debug.getregistry
-    debug.getregistry = function()
-        return error("Debugger detected")
-    end
-    
-    -- Self-destructing variables
-    local _metadata = {}
-    setmetatable(_metadata, {__gc = function()
-        -- Cleanup when garbage collected
-        for k, v in pairs(
+})
 
+_metadata = nil
+collectgarbage()
+'''
+
+    # Combine security scripts with original content
+    final_script = vm_detection + anti_debug + script_content
+    return final_script, 200, {'Content-Type': 'text/plain'}
+    
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
