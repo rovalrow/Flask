@@ -90,6 +90,10 @@ def generate():
 
 @app.route('/l/<script_id>.lua')
 def loader_script(script_id):
+    user_agent = request.headers.get("User-Agent", "").lower()
+    if "roblox" not in user_agent and "robloxapp" not in user_agent:
+        return render_template("unauthorized.html"), 403
+
     script_id_clean = re.sub(r"[^a-zA-Z0-9]", "", script_id)
     internal_url = f"{request.host_url}_internal/{script_id_clean}.lua"
     loader_code = f'''
@@ -111,7 +115,6 @@ def internal_script(script_id):
         return Response('-- Script not found', mimetype='text/plain')
 
     user_agent = request.headers.get("User-Agent", "").lower()
-
     if "roblox" not in user_agent and "robloxapp" not in user_agent:
         return render_template("unauthorized.html"), 403
 
