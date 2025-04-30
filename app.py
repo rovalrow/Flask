@@ -1,16 +1,22 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session
 import os
 import re
 import requests
 import uuid
 import json
 from datetime import datetime, timedelta
+import hmac
+import hashlib
+import base64
+from functools import wraps
+from collections import defaultdict
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Replace with a strong secret key
 
 SCRIPTS_DIR = "scripts"
 TOKENS = {}  # In-memory token storage (use a database for production)
+RATE_LIMITS = defaultdict(list)  # In-memory rate limiting (use Redis for production)
 
 # Create scripts folder if it doesn’t exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
@@ -19,6 +25,41 @@ os.makedirs(SCRIPTS_DIR, exist_ok=True)
 OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")  # Replace with your API key
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
+
+# Rate limiting configuration
+RATE_LIMIT_REQUESTS = 10  # Max requests per minute
+RATE_LIMIT_WINDOW = 60  # 1 minute in seconds
+
+# Generate a secure HMAC token
+def generate_secure_token(script_name, ip, user_agent):
+    key = app.secret_key.encode('utf-8')
+    message = f"{script_name}:{ip}:{user_agent}:{datetime.now().timestamp()}".encode('utf-8')
+    token = hmac.new(key, message, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(token).decode('utf-8')
+
+# Validate a secure token
+def validate_secure_token(token, script_name, ip, user_agent):
+    try:
+        key = app.secret_key.encode('utf-8')
+        expected_message = f"{script_name}:{ip}:{user_agent}".encode('utf-8')
+        expected_token = hmac.new(key, expected_message, hashlib.sha256).digest()
+        expected_token_b64 = base64.urlsafe_b64encode(expected_token).decode('utf-8')
+        return hmac.compare_digest(token, expected_token_b64)
+    except Exception:
+        return False
+
+# Rate limiting decorator
+def rate_limit(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        ip = request.remote_addr
+        now = datetime.now().timestamp()
+        RATE_LIMITS[ip] = [t for t in RATE_LIMITS[ip] if now - t < RATE_LIMIT_WINDOW]
+        if len(RATE_LIMITS[ip]) >= RATE_LIMIT_REQUESTS:
+            return jsonify({"error": "Rate limit exceeded"}), 429
+        RATE_LIMITS[ip].append(now)
+        return f(*args, **kwargs)
+    return decorated_function
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
@@ -72,6 +113,7 @@ def home():
     return render_template("index.html")  # You’ll need an index.html for the frontend
 
 @app.route('/generate', methods=['POST'])
+@rate_limit
 def generate():
     data = request.json
     script_content = data.get("script", "").strip()
@@ -96,32 +138,56 @@ def generate():
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
 
-    # Generate a unique token with a 1-hour expiration
-    token = uuid.uuid4().hex
-    expiration = datetime.now() + timedelta(hours=1)
-    TOKENS[token] = {"script_name": script_name, "expiration": expiration}
+    # Generate a secure token tied to the client’s IP and User-Agent
+    ip = request.remote_addr
+    user_agent = request.headers.get("User-Agent", "")
+    token = generate_secure_token(script_name, ip, user_agent)
 
-    # Return a secure link with the token
+    # Store the token with expiration
+    expiration = datetime.now() + timedelta(minutes=10)  # Token expires in 10 minutes
+    TOKENS[token] = {"script_name": script_name, "expiration": expiration, "ip": ip, "user_agent": user_agent}
+
+    # Initialize session
+    session['script_access'] = script_name
+
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}?token={token}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
+@rate_limit
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
 
     if not os.path.exists(script_path):
         return 'game.Players.LocalPlayer:Kick("Script not found. Regenerate at scriptguardian.onrender.com")', 200, {'Content-Type': 'text/plain'}
 
-    # Check for a valid token
+    # Check session
+    if 'script_access' not in session or session['script_access'] != script_name:
+        return render_template("unauthorized.html"), 403
+
+    # Check token
     provided_token = request.args.get('token')
     if not provided_token or provided_token not in TOKENS:
-        return render_template("unauthorized.html"), 403  # Create an unauthorized.html page
-
-    # Validate token expiration and script match
-    token_data = TOKENS[provided_token]
-    if datetime.now() > token_data["expiration"]:
-        del TOKENS[provided_token]  # Clean up expired token
         return render_template("unauthorized.html"), 403
+
+    # Validate token expiration and client data
+    token_data = TOKENS[provided_token]
+    ip = request.remote_addr
+    user_agent = request.headers.get("User-Agent", "")
+
+    if datetime.now() > token_data["expiration"]:
+        del TOKENS[provided_token]
+        return render_template("unauthorized.html"), 403
+
     if token_data["script_name"] != script_name:
+        return render_template("unauthorized.html"), 403
+
+    # Validate token against client fingerprint
+    if not validate_secure_token(provided_token, script_name, ip, user_agent):
+        return render_template("unauthorized.html"), 403
+
+    # Additional Roblox-specific validation (optional, if possible to implement)
+    # For example, check for specific headers or patterns unique to Roblox requests
+    if "Roblox" not in user_agent:
         return render_template("unauthorized.html"), 403
 
     # Serve the script if all checks pass
@@ -129,6 +195,7 @@ def execute(script_name):
         return f.read(), 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
+@rate_limit
 def api_obfuscate():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
