@@ -101,25 +101,48 @@ def generate():
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
 
-    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
+    # Optional: Generate a token for the script
+    token = uuid.uuid4().hex
+    token_path = os.path.join(SCRIPTS_DIR, f"{script_name}.token")
+    with open(token_path, "w") as f:
+        f.write(token)
+
+    # Include the token in the link
+    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}?token={token}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
+    token_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.token")
 
-    if os.path.exists(script_path):
-        user_agent = request.headers.get("User-Agent", "").lower()
+    # Check if the script exists
+    if not os.path.exists(script_path):
+        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}
 
-        # Check if request is NOT from Roblox
-        if not ("roblox" in user_agent or "robloxapp" in user_agent):
-            # Serve the Unauthorized HTML
-            return render_template("unauthorized.html"), 403
+    # Optional: Verify token
+    provided_token = request.args.get('token')
+    if provided_token is None or not os.path.exists(token_path):
+        return render_template("unauthorized.html"), 403
 
-        # If User-Agent is Roblox, send raw Lua script
-        with open(script_path, "r", encoding="utf-8") as f:
-            return f.read(), 200, {'Content-Type': 'text/plain'}
+    with open(token_path, "r") as f:
+        stored_token = f.read().strip()
 
-        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}      
+    if provided_token != stored_token:
+        return render_template("unauthorized.html"), 403
+
+    # Check User-Agent
+    user_agent = request.headers.get("User-Agent", "").lower()
+    if not ("roblox" in user_agent or "robloxapp" in user_agent):
+        return render_template("unauthorized.html"), 403
+
+    # Check Referer
+    referer = request.referrer
+    if referer is None or not referer.startswith("https://scriptguardian.onrender.com"):
+        return render_template("unauthorized.html"), 403
+
+    # If all checks pass, serve the script
+    with open(script_path, "r", encoding="utf-8") as f:
+        return f.read(), 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
@@ -140,5 +163,3 @@ def api_obfuscate():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-
-
