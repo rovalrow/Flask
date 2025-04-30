@@ -70,15 +70,6 @@ def obfuscate_lua_code(code):
     except Exception as e:
         return {"error": str(e)}, False
 
-def is_spoofed(request):
-    ua = request.headers.get("User-Agent", "").lower()
-    if "roblox" not in ua and "robloxapp" not in ua:
-        return True
-    for header in request.headers:
-        if header.lower().startswith("x-") and header.lower() != "x-forwarded-for":
-            return True
-    return False
-
 @app.route('/')
 def home():
     return render_template("index.html")
@@ -118,11 +109,6 @@ def execute(script_name):
 
     if os.path.exists(script_path):
         user_agent = request.headers.get("User-Agent", "").lower()
-
-if is_spoofed(request):
-        # Return Lua for spoofers AND render unauthorized page
-        lua_response = make_response('Hello!")')
-        lua_response.headers["Content-Type"] = "text/plain"
 
         # Check if request is NOT from Roblox
         if not ("roblox" in user_agent or "robloxapp" in user_agent):
