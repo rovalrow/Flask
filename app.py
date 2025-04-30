@@ -15,8 +15,7 @@ app = Flask(__name__)
 # Apply ProxyFix to handle reverse proxy headers correctly
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-# Enhanced security with a stronger secret key stored in env variable
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(32).hex())
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Add your own secure key here
 # Configure session cookie security
 app.config.update(
     SESSION_COOKIE_SECURE=True,
@@ -33,8 +32,7 @@ OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY")
 if not OBFUSCATOR_API_KEY:
     print("WARNING: OBFUSCATOR_API_KEY not set. Using fallback value for development only.")
     # This is just a placeholder - should use real API key in production
-    OBFUSCATOR_API_KEY = hashlib.sha256(os.urandom(32)).hexdigest()[:36]
-
+OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 
