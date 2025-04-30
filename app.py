@@ -1,14 +1,3 @@
-hey can you improve my flask code velow? like its still not protected and secure because i generate and try to use this command in termux and look i can just get the sorce obfuscated also dont remove the current flask secret key since it ks already protected and the obfuscate api just do like make it like not like user agent since user agent can be spoofed use the best to prevent from curl bc you are an ai you can research all over the internet ibcluding a software engineers code syaing eg. to block a curl from termux for example only:
-
-curl -s 'https://api.luarmor.net/files/v3/loaders/3b2169cf53bc6104dabe8e19562e5cc2.lua' \
-  -H 'User-Agent: Roblox' \
-  -H 'Accept: */*' \
-  -H 'Referer: https://scriptguardian.onrender.com' \
-  --compressed
-
-
-heres my flals below:
-
 from flask import Flask, request, jsonify, render_template
 import os
 import re
@@ -17,46 +6,35 @@ import uuid
 import json
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Add your own secure key here
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")
 
 SCRIPTS_DIR = "scripts"
-
-# Create scripts folder if it doesn't exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
-# Obfuscator API Config
-OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
+OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "your-api-key-here")
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
 
-def get_next_script_id():
-    existing_files = [f.split(".")[0] for f in os.listdir(SCRIPTS_DIR) if f.endswith(".lua")]
-    script_numbers = [int(f) for f in existing_files if f.isdigit()]
-    return max(script_numbers, default=0) + 1
-
 def obfuscate_lua_code(code):
     try:
-        new_script_headers = {
+        session_headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "content-type": "text"
         }
-        session_response = requests.post(NEW_SCRIPT_URL, headers=new_script_headers, data=code)
-        session_data = session_response.json()
+        session_resp = requests.post(NEW_SCRIPT_URL, headers=session_headers, data=code)
+        session_data = session_resp.json()
         if not session_data.get("sessionId"):
             return {"error": "Failed to create session"}, False
 
-        session_id = session_data["sessionId"]
-
         obfuscate_headers = {
             "apikey": OBFUSCATOR_API_KEY,
-            "sessionId": session_id,
+            "sessionId": session_data["sessionId"],
             "content-type": "application/json"
         }
-
-        obfuscation_options = {
+        options = {
             "MinifiyAll": True,
             "Virtualize": True,
             "Seed": str(uuid.uuid4().int)[:8],
@@ -70,14 +48,12 @@ def obfuscate_lua_code(code):
                 "WowPacker": True
             }
         }
-
-        obfuscate_response = requests.post(OBFUSCATE_URL, headers=obfuscate_headers, data=json.dumps(obfuscation_options))
-        obfuscate_data = obfuscate_response.json()
-        if not obfuscate_data.get("code"):
+        response = requests.post(OBFUSCATE_URL, headers=obfuscate_headers, data=json.dumps(options))
+        data = response.json()
+        if not data.get("code"):
             return {"error": "Failed to obfuscate code"}, False
 
-        return {"obfuscated_code": obfuscate_data["code"]}, True
-
+        return {"obfuscated_code": data["code"]}, True
     except Exception as e:
         return {"error": str(e)}, False
 
@@ -94,13 +70,12 @@ def generate():
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
 
-    obfuscation_result, success = obfuscate_lua_code(script_content)
-
+    result, success = obfuscate_lua_code(script_content)
     if not success:
-        return jsonify(obfuscation_result), 500
+        return jsonify(result), 500
 
-    obfuscated_script = obfuscation_result["obfuscated_code"]
-    base_name = custom_name if custom_name else uuid.uuid4().hex
+    obfuscated_script = result["obfuscated_code"]
+    base_name = custom_name or uuid.uuid4().hex
     script_name = base_name
     counter = 1
     while os.path.exists(os.path.join(SCRIPTS_DIR, f"{script_name}.lua")):
@@ -108,38 +83,37 @@ def generate():
         counter += 1
 
     script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
-
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
-def execute(script_name):
-    script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
+def loader_stub(script_name):
+    sanitized = sanitize_filename(script_name)
+    user_agent = request.headers.get("User-Agent", "").lower()
+
+    # If not Roblox, serve the unauthorized.html page
+    if not ("roblox" in user_agent or "robloxapp" in user_agent):
+        return render_template("unauthorized.html"), 403
+
+    # Roblox client - return stub Lua code that loads actual script after delay
+    raw_url = f"{request.host_url}scriptguardian/files/scripts/raw/{sanitized}"
+    lua_stub = f'task.wait(1)\nloadstring(game:HttpGet("{raw_url}"))()'
+    return lua_stub, 200, {'Content-Type': 'text/plain'}
+
+@app.route('/scriptguardian/files/scripts/raw/<script_name>')
+def raw_script(script_name):
+    sanitized = sanitize_filename(script_name)
+    script_path = os.path.join(SCRIPTS_DIR, f"{sanitized}.lua")
 
     if not os.path.exists(script_path):
-        return render_template("unauthorized.html"), 403
+        return 'game.Players.LocalPlayer:Kick("Script no longer exists. Please regenerate.")', 200, {'Content-Type': 'text/plain'}
 
-    # Retrieve User-Agent, IP, Referer
     user_agent = request.headers.get("User-Agent", "").lower()
-    referer = request.headers.get("Referer", "")
-    ip_address = request.headers.get("CF-Connecting-IP") or request.remote_addr
-
-    # Block known curl, termux, wget, python-requests, etc.
-    blocked_agents = ["curl", "wget", "httpie", "python", "termux", "powershell"]
-    if any(bad in user_agent for bad in blocked_agents):
+    if not ("roblox" in user_agent or "robloxapp" in user_agent):
         return render_template("unauthorized.html"), 403
 
-    # Only allow Roblox clients (you can fine-tune this)
-    if not "roblox" in user_agent:
-        return render_template("unauthorized.html"), 403
-
-    # Additional check: Referer must be blank (typical of Roblox)
-    if referer and not referer.startswith("https://www.roblox.com"):
-        return render_template("unauthorized.html"), 403
-
-    # If checks pass, return the script
     with open(script_path, "r", encoding="utf-8") as f:
         return f.read(), 200, {'Content-Type': 'text/plain'}
 
@@ -152,14 +126,12 @@ def api_obfuscate():
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
 
-    obfuscation_result, success = obfuscate_lua_code(script_content)
-
+    result, success = obfuscate_lua_code(script_content)
     if not success:
-        return jsonify(obfuscation_result), 500
+        return jsonify(result), 500
 
-    return jsonify({"obfuscated_code": obfuscation_result["obfuscated_code"]}), 200
+    return jsonify({"obfuscated_code": result["obfuscated_code"]}), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-    
