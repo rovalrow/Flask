@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template
 import os
 import re
 import requests
@@ -31,20 +31,20 @@ RATE_LIMIT_REQUESTS = 10  # Max requests per minute
 RATE_LIMIT_WINDOW = 60  # 1 minute in seconds
 
 # Generate a secure HMAC token
-def generate_secure_token(script_name, ip, user_agent):
+def generate_secure_token(script_name):
     key = app.secret_key.encode('utf-8')
-    message = f"{script_name}:{ip}:{user_agent}:{datetime.now().timestamp()}".encode('utf-8')
+    message = f"{script_name}:{datetime.now().timestamp()}".encode('utf-8')
     token = hmac.new(key, message, hashlib.sha256).digest()
     return base64.urlsafe_b64encode(token).decode('utf-8')
 
 # Validate a secure token
-def validate_secure_token(token, script_name, ip, user_agent):
+def validate_secure_token(token, script_name):
     try:
         key = app.secret_key.encode('utf-8')
-        expected_message = f"{script_name}:{ip}:{user_agent}".encode('utf-8')
-        expected_token = hmac.new(key, expected_message, hashlib.sha256).digest()
-        expected_token_b64 = base64.urlsafe_b64encode(expected_token).decode('utf-8')
-        return hmac.compare_digest(token, expected_token_b64)
+        # We need to account for token expiration when validating
+        # Since the timestamp is part of the message, we can’t validate without it
+        # Instead, we’ll rely on the token being present in TOKENS and check expiration there
+        return token in TOKENS and TOKENS[token]["script_name"] == script_name
     except Exception:
         return False
 
@@ -60,6 +60,13 @@ def rate_limit(f):
         RATE_LIMITS[ip].append(now)
         return f(*args, **kwargs)
     return decorated_function
+
+# Check if the request is likely from Roblox
+def is_roblox_request():
+    user_agent = request.headers.get("User-Agent", "").lower()
+    # Common Roblox User-Agent patterns
+    roblox_patterns = ["roblox", "robloxapp", "roblox/win", "roblox/ios", "roblox/android"]
+    return any(pattern in user_agent for pattern in roblox_patterns)
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
@@ -138,17 +145,12 @@ def generate():
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
 
-    # Generate a secure token tied to the client’s IP and User-Agent
-    ip = request.remote_addr
-    user_agent = request.headers.get("User-Agent", "")
-    token = generate_secure_token(script_name, ip, user_agent)
+    # Generate a secure token
+    token = generate_secure_token(script_name)
 
     # Store the token with expiration
     expiration = datetime.now() + timedelta(minutes=10)  # Token expires in 10 minutes
-    TOKENS[token] = {"script_name": script_name, "expiration": expiration, "ip": ip, "user_agent": user_agent}
-
-    # Initialize session
-    session['script_access'] = script_name
+    TOKENS[token] = {"script_name": script_name, "expiration": expiration}
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}?token={token}"}), 200
 
@@ -160,20 +162,13 @@ def execute(script_name):
     if not os.path.exists(script_path):
         return 'game.Players.LocalPlayer:Kick("Script not found. Regenerate at scriptguardian.onrender.com")', 200, {'Content-Type': 'text/plain'}
 
-    # Check session
-    if 'script_access' not in session or session['script_access'] != script_name:
-        return render_template("unauthorized.html"), 403
-
     # Check token
     provided_token = request.args.get('token')
-    if not provided_token or provided_token not in TOKENS:
+    if not provided_token or not validate_secure_token(provided_token, script_name):
         return render_template("unauthorized.html"), 403
 
-    # Validate token expiration and client data
+    # Validate token expiration
     token_data = TOKENS[provided_token]
-    ip = request.remote_addr
-    user_agent = request.headers.get("User-Agent", "")
-
     if datetime.now() > token_data["expiration"]:
         del TOKENS[provided_token]
         return render_template("unauthorized.html"), 403
@@ -181,13 +176,8 @@ def execute(script_name):
     if token_data["script_name"] != script_name:
         return render_template("unauthorized.html"), 403
 
-    # Validate token against client fingerprint
-    if not validate_secure_token(provided_token, script_name, ip, user_agent):
-        return render_template("unauthorized.html"), 403
-
-    # Additional Roblox-specific validation (optional, if possible to implement)
-    # For example, check for specific headers or patterns unique to Roblox requests
-    if "Roblox" not in user_agent:
+    # Check if the request is from Roblox
+    if not is_roblox_request():
         return render_template("unauthorized.html"), 403
 
     # Serve the script if all checks pass
