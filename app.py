@@ -4,35 +4,32 @@ import re
 import requests
 import uuid
 import json
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Add your own secure key here
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")  # Replace with a strong secret key
 
 SCRIPTS_DIR = "scripts"
+TOKENS = {}  # In-memory token storage (use a database for production)
 
-# Create scripts folder if it doesn't exist
+# Create scripts folder if it doesn’t exist
 os.makedirs(SCRIPTS_DIR, exist_ok=True)
 
 # Obfuscator API Config
-OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
+OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")  # Replace with your API key
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
 
-def get_next_script_id():
-    existing_files = [f.split(".")[0] for f in os.listdir(SCRIPTS_DIR) if f.endswith(".lua")]
-    script_numbers = [int(f) for f in existing_files if f.isdigit()]
-    return max(script_numbers, default=0) + 1
-
 def obfuscate_lua_code(code):
     try:
-        new_script_headers = {
+        headers = {
             "apikey": OBFUSCATOR_API_KEY,
             "content-type": "text"
         }
-        session_response = requests.post(NEW_SCRIPT_URL, headers=new_script_headers, data=code)
+        session_response = requests.post(NEW_SCRIPT_URL, headers=headers, data=code)
         session_data = session_response.json()
         if not session_data.get("sessionId"):
             return {"error": "Failed to create session"}, False
@@ -72,7 +69,7 @@ def obfuscate_lua_code(code):
 
 @app.route('/')
 def home():
-    return render_template("index.html")
+    return render_template("index.html")  # You’ll need an index.html for the frontend
 
 @app.route('/generate', methods=['POST'])
 def generate():
@@ -84,7 +81,6 @@ def generate():
         return jsonify({"error": "No script provided"}), 400
 
     obfuscation_result, success = obfuscate_lua_code(script_content)
-
     if not success:
         return jsonify(obfuscation_result), 500
 
@@ -97,50 +93,38 @@ def generate():
         counter += 1
 
     script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
-
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(obfuscated_script)
 
-    # Optional: Generate a token for the script
+    # Generate a unique token with a 1-hour expiration
     token = uuid.uuid4().hex
-    token_path = os.path.join(SCRIPTS_DIR, f"{script_name}.token")
-    with open(token_path, "w") as f:
-        f.write(token)
+    expiration = datetime.now() + timedelta(hours=1)
+    TOKENS[token] = {"script_name": script_name, "expiration": expiration}
 
-    # Include the token in the link
+    # Return a secure link with the token
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}?token={token}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
     script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
-    token_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.token")
 
-    # Check if the script exists
     if not os.path.exists(script_path):
-        return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}
+        return 'game.Players.LocalPlayer:Kick("Script not found. Regenerate at scriptguardian.onrender.com")', 200, {'Content-Type': 'text/plain'}
 
-    # Optional: Verify token
+    # Check for a valid token
     provided_token = request.args.get('token')
-    if provided_token is None or not os.path.exists(token_path):
+    if not provided_token or provided_token not in TOKENS:
+        return render_template("unauthorized.html"), 403  # Create an unauthorized.html page
+
+    # Validate token expiration and script match
+    token_data = TOKENS[provided_token]
+    if datetime.now() > token_data["expiration"]:
+        del TOKENS[provided_token]  # Clean up expired token
+        return render_template("unauthorized.html"), 403
+    if token_data["script_name"] != script_name:
         return render_template("unauthorized.html"), 403
 
-    with open(token_path, "r") as f:
-        stored_token = f.read().strip()
-
-    if provided_token != stored_token:
-        return render_template("unauthorized.html"), 403
-
-    # Check User-Agent
-    user_agent = request.headers.get("User-Agent", "").lower()
-    if not ("roblox" in user_agent or "robloxapp" in user_agent):
-        return render_template("unauthorized.html"), 403
-
-    # Check Referer
-    referer = request.referrer
-    if referer is None or not referer.startswith("https://scriptguardian.onrender.com"):
-        return render_template("unauthorized.html"), 403
-
-    # If all checks pass, serve the script
+    # Serve the script if all checks pass
     with open(script_path, "r", encoding="utf-8") as f:
         return f.read(), 200, {'Content-Type': 'text/plain'}
 
@@ -154,7 +138,6 @@ def api_obfuscate():
         return jsonify({"error": "No script provided"}), 400
 
     obfuscation_result, success = obfuscate_lua_code(script_content)
-
     if not success:
         return jsonify(obfuscation_result), 500
 
