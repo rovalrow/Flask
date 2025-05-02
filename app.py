@@ -4,14 +4,15 @@ import re
 import requests
 import uuid
 import json
+from supabase import create_client
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABYpbj6-6zZXa_K-qclTpaXWyyM")  # Add your own secure key here
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABWfDQXfye-8ewXoXpq-SQj5iF0")
 
-SCRIPTS_DIR = "scripts"
-
-# Create scripts folder if it doesn't exist
-os.makedirs(SCRIPTS_DIR, exist_ok=True)
+# Supabase configuration
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "your-supabase-url")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "your-supabase-anon-key")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Obfuscator API Config
 OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
@@ -20,11 +21,6 @@ OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
-
-def get_next_script_id():
-    existing_files = [f.split(".")[0] for f in os.listdir(SCRIPTS_DIR) if f.endswith(".lua")]
-    script_numbers = [int(f) for f in existing_files if f.isdigit()]
-    return max(script_numbers, default=0) + 1
 
 def obfuscate_lua_code(code):
     try:
@@ -89,48 +85,50 @@ def generate():
         return jsonify(obfuscation_result), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
-    base_name = custom_name if custom_name else uuid.uuid4().hex
-    script_name = base_name
-    counter = 1
-    while os.path.exists(os.path.join(SCRIPTS_DIR, f"{script_name}.lua")):
-        script_name = f"{base_name}{counter}"
-        counter += 1
+    
+    # Generate script name
+    script_name = custom_name if custom_name else uuid.uuid4().hex
+    
+    # Check if script name already exists in Supabase
+    existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
+    
+    # If script name exists, append a counter
+    if existing_scripts.data:
+        counter = 1
+        while True:
+            new_name = f"{script_name}{counter}"
+            name_check = supabase.table("scripts").select("name").eq("name", new_name).execute()
+            if not name_check.data:
+                script_name = new_name
+                break
+            counter += 1
 
-    script_path = os.path.join(SCRIPTS_DIR, f"{script_name}.lua")
-
-    with open(script_path, "w", encoding="utf-8") as f:
-        f.write(obfuscated_script)
+    # Store script in Supabase
+    supabase.table("scripts").insert({
+        "name": script_name,
+        "content": obfuscated_script,
+        "created_at": "now()"
+    }).execute()
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
-    script_path = os.path.join(SCRIPTS_DIR, f"{sanitize_filename(script_name)}.lua")
-
-    if os.path.exists(script_path):
+    # Get script from Supabase
+    script_name = sanitize_filename(script_name)
+    response = supabase.table("scripts").select("content").eq("name", script_name).execute()
+    
+    if response.data:
         user_agent = request.headers.get("User-Agent", "").lower()
 
-        # List of blocked user agents
-        blocked_user_agents = [
-            "curl/8.13.0",
-            "wget/1.25.0",
-            "httpie/3.2.4",
-            "python-requests/2.32.3"
-        ]
-
-        # Check if user agent matches any blocked user agents or contains "termux"
-        if any(ua.lower() == user_agent for ua in blocked_user_agents) or "termux" in user_agent:
+        # Check if request is NOT from Roblox
+        if not ("roblox" in user_agent or "robloxapp" in user_agent):
+            # Serve the Unauthorized HTML
             return render_template("unauthorized.html"), 403
 
-        # Check if request is from Roblox
-        if "roblox" in user_agent or "robloxapp" in user_agent:
-            # Serve the raw Lua script
-            with open(script_path, "r", encoding="utf-8") as f:
-                return f.read(), 200, {'Content-Type': 'text/plain'}
-
-        # If not Roblox, serve unauthorized page
-        return render_template("unauthorized.html"), 403
-
+        # If User-Agent is Roblox, send raw Lua script
+        return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
+    
     return 'game.Players.LocalPlayer:Kick("The script youre trying to run does no longer exists in the loader files, Please regenerate again at scriptguardian.onrender.com | discord.gg/jdark")', 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
