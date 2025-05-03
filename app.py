@@ -103,33 +103,43 @@ def generate():
                 break
             counter += 1
 
-    # Store script in Supabase
-    supabase.table("scripts").insert({
-        "name": script_name,
-        "content": obfuscated_script,
-        "created_at": "now()"
-    }).execute()
+supabase.table("scripts").insert({
+    "name": script_name,
+    "content": obfuscated_script,
+    "unobfuscated": script_content,
+    "created_at": "now()"
+}).execute()
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
-    # Get script from Supabase
     script_name = sanitize_filename(script_name)
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
     
-    if response.data:
-        user_agent = request.headers.get("User-Agent", "").lower()
-
-        # Check if request is NOT from Roblox
-        if not ("roblox" in user_agent or "robloxapp" in user_agent):
-            # Serve the Unauthorized HTML
+    if not response.data:
+        return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
+    
+    try:
+        # Fetch external data
+        httpbin_response = requests.get("https://httpbin.org/get", headers=request.headers)
+        if httpbin_response.status_code != 200:
             return render_template("unauthorized.html"), 403
-
-        # If User-Agent is Roblox, send raw Lua script
+        
+        httpbin_data = httpbin_response.json()
+        headers = httpbin_data.get("headers", {})
+        
+        user_agent = headers.get("User-Agent", "")
+        game_id = headers.get("Roblox-Game-Id")
+        session_id = headers.get("Roblox-Session-Id")
+        
+        if not (user_agent and game_id and session_id):
+            return render_template("unauthorized.html"), 403
+        
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
     
-    return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
+    except Exception as e:
+        return render_template("unauthorized.html"), 403
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
