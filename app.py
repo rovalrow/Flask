@@ -86,13 +86,9 @@ def generate():
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
     
-    # Generate script name
     script_name = custom_name if custom_name else uuid.uuid4().hex
-    
-    # Check if script name already exists in Supabase
     existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
-    
-    # If script name exists, append a counter
+
     if existing_scripts.data:
         counter = 1
         while True:
@@ -103,38 +99,35 @@ def generate():
                 break
             counter += 1
 
-    # Store script in Supabase
     supabase.table("scripts").insert({
-    "name": script_name,
-    "content": obfuscated_script,
-    "unobfuscated": script_content,
-    "created_at": "now()"
-}).execute()
+        "name": script_name,
+        "content": obfuscated_script,
+        "unobfuscated": script_content,
+        "created_at": "now()"
+    }).execute()
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
-    script_name = sanitize_filename(script_name)
-    response = supabase.table("scripts").select("content").eq("name", script_name).execute()
+    script_name = sanitize_filename(script_name)
+    response = supabase.table("scripts").select("content").eq("name", script_name).execute()
 
-    if response.data:
-        headers = request.headers
-        user_agent = headers.get("User-Agent", "").lower()
-        game_id = headers.get("Roblox-Game-Id")
-        session_id = headers.get("Roblox-Session-Id")
+    if response.data:
+        headers = request.headers
+        user_agent = headers.get("User-Agent", "").lower()
+        game_id = headers.get("Roblox-Game-Id")
+        session_id = headers.get("Roblox-Session-Id")
 
-        # Validate all required headers
-        if not (
-            ("roblox" in user_agent or "robloxapp" in user_agent) and
-            game_id and session_id
-        ):
-            return render_template("unauthorized.html"), 403
+        if not (
+            ("roblox" in user_agent or "robloxapp" in user_agent) and
+            game_id and session_id
+        ):
+            return render_template("unauthorized.html"), 403
 
-        # If all headers are valid, return Lua script
-        return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
+        return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
 
-    return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
+    return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
@@ -154,4 +147,4 @@ def api_obfuscate():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
