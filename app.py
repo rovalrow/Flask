@@ -110,35 +110,30 @@ def generate():
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
-    # Sanitize filename to prevent path traversal attacks
     script_name = sanitize_filename(script_name)
-    
-    # Extract and validate Roblox headers
-    headers = request.headers
-    user_agent = headers.get("User-Agent", "").lower()
-    game_id = headers.get("Roblox-Game-Id")
-    session_id = headers.get("Roblox-Session-Id")
-
-    # Strict validation: require all three authentication components
-    is_valid_roblox_client = (
-        ("roblox" in user_agent or "robloxapp" in user_agent) and
-        game_id is not None and game_id.strip() != "" and
-        session_id is not None and session_id.strip() != ""
-    )
-    
-    # Reject any non-Roblox client requests immediately
-    if not is_valid_roblox_client:
-        return render_template("unauthorized.html"), 403
-    
-    # Only proceed to database query if validation passed
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
 
-    # If script exists in database, return its obfuscated content
-    if response.data and len(response.data) > 0:
-        # Return the obfuscated script content directly from the database
+    if response.data:
+        headers = request.headers
+        user_agent = headers.get("User-Agent", "").lower()
+        game_id = headers.get("Roblox-Game-Id")
+        session_id = headers.get("Roblox-Session-Id")
+
+        # List of known exploit clients (partial, you can expand this)
+        known_exploits = [
+            "synapse", "krnl", "fluxus", "electron", "hydrogen",
+            "vega x", "script-ware", "oxygen", "evon", "dansploit",
+            "delta", "valyse", "trigon", "arceus", "infinite yield"
+        ]
+
+        if not (
+            any(exploit in user_agent for exploit in known_exploits) and
+            game_id and session_id
+        ):
+            return render_template("unauthorized.html"), 403
+
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
-    
-    # If script not found, return a kick message that will execute in the Roblox client
+
     return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
