@@ -103,7 +103,8 @@ def generate():
                 break
             counter += 1
 
-supabase.table("scripts").insert({
+    # Store script in Supabase
+    supabase.table("scripts").insert({
     "name": script_name,
     "content": obfuscated_script,
     "unobfuscated": script_content,
@@ -114,32 +115,26 @@ supabase.table("scripts").insert({
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
-    script_name = sanitize_filename(script_name)
-    response = supabase.table("scripts").select("content").eq("name", script_name).execute()
-    
-    if not response.data:
-        return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
-    
-    try:
-        # Fetch external data
-        httpbin_response = requests.get("https://httpbin.org/get", headers=request.headers)
-        if httpbin_response.status_code != 200:
-            return render_template("unauthorized.html"), 403
-        
-        httpbin_data = httpbin_response.json()
-        headers = httpbin_data.get("headers", {})
-        
-        user_agent = headers.get("User-Agent", "")
-        game_id = headers.get("Roblox-Game-Id")
-        session_id = headers.get("Roblox-Session-Id")
-        
-        if not (user_agent and game_id and session_id):
-            return render_template("unauthorized.html"), 403
-        
-        return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
-    
-    except Exception as e:
-        return render_template("unauthorized.html"), 403
+    script_name = sanitize_filename(script_name)
+    response = supabase.table("scripts").select("content").eq("name", script_name).execute()
+
+    if response.data:
+        headers = request.headers
+        user_agent = headers.get("User-Agent", "").lower()
+        game_id = headers.get("Roblox-Game-Id")
+        session_id = headers.get("Roblox-Session-Id")
+
+        # Validate all required headers
+        if not (
+            ("roblox" in user_agent or "robloxapp" in user_agent) and
+            game_id and session_id
+        ):
+            return render_template("unauthorized.html"), 403
+
+        # If all headers are valid, return Lua script
+        return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
+
+    return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
