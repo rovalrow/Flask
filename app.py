@@ -86,9 +86,13 @@ def generate():
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
     
+    # Generate script name
     script_name = custom_name if custom_name else uuid.uuid4().hex
+    
+    # Check if script name already exists in Supabase
     existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
-
+    
+    # If script name exists, append a counter
     if existing_scripts.data:
         counter = 1
         while True:
@@ -99,6 +103,7 @@ def generate():
                 break
             counter += 1
 
+    # Store script in Supabase
     supabase.table("scripts").insert({
         "name": script_name,
         "content": obfuscated_script,
@@ -110,13 +115,14 @@ def generate():
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
+    # Get script from Supabase
     script_name = sanitize_filename(script_name)
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
-
+    
     if response.data:
         user_agent = request.headers.get("User-Agent", "").lower()
 
-        known_exploits = [
+known_exploits = [
             "synapse", "krnl", "fluxus", "electron", "hydrogen",
             "vega x", "script-ware", "oxygen", "evon", "dansploit",
             "delta", "valyse", "trigon", "arceus", "infinite yield"
@@ -128,7 +134,7 @@ def execute(script_name):
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
 
     return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
-
+    
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
@@ -147,4 +153,4 @@ def api_obfuscate():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)
