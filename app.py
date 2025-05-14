@@ -110,35 +110,24 @@ def generate():
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
-    script_name = secure_filename(script_name)
+    script_name = sanitize_filename(script_name)
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
 
     if response.data:
         user_agent = request.headers.get("User-Agent", "").lower()
 
-        # List of known exploit clients (partial list — expand as needed)
         known_exploits = [
             "synapse", "krnl", "fluxus", "electron", "hydrogen",
             "vega x", "script-ware", "oxygen", "evon", "dansploit",
             "delta", "valyse", "trigon", "arceus", "infinite yield"
         ]
 
-        # Check if user agent includes any known exploit
-        is_exploit = any(exploit in user_agent for exploit in known_exploits)
-
-        # Check that it does NOT contain "roblox" or "robloxapp"
-        is_not_roblox = "roblox" not in user_agent and "robloxapp" not in user_agent
-
-        if is_exploit and is_not_roblox:
-            return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
-        else:
+        if not any(exploit in user_agent for exploit in known_exploits):
             return render_template("unauthorized.html"), 403
 
-    return (
-        'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")',
-        200,
-        {'Content-Type': 'text/plain'}
-    )
+        return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
+
+    return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
