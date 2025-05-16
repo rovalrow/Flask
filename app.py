@@ -134,14 +134,35 @@ def execute(script_name):
 
 @app.route('/scriptguardian/webhooks/create', methods=['POST'])
 def create_webhook():
-    data = request.get_json()
-    raw_webhook = data.get("webhook", "")
-    if not raw_webhook.startswith("https://discord.com/api/webhooks/"):
-        return jsonify({"error": "Invalid webhook"}), 400
+    try:
+        data = request.get_json(force=True)
+        original_webhook = data.get("webhook", "").strip()
 
-    webhook_id = uuid.uuid4().hex
-    supabase.table("webhooks").insert({"id": webhook_id, "url": raw_webhook}).execute()
-    return jsonify({"proxy": f"{request.host_url}scriptguardian/webhooks/send/{webhook_id}"})
+        if not original_webhook.startswith("https://discord.com/api/webhooks/"):
+            return jsonify({"error": "Invalid webhook URL"}), 400
+
+        # Check if webhook already exists
+        existing = supabase.table("discord_webhooks").select("id").eq("webhook", original_webhook).execute()
+
+        if existing.data:
+            path_id = existing.data[0]["id"]
+        else:
+            path_id = uuid.uuid4().hex[:12]
+            insert_result = supabase.table("discord_webhooks").insert({
+                "id": path_id,
+                "webhook": original_webhook,
+                "created_at": "now()"
+            }).execute()
+
+            if insert_result.error:
+                return jsonify({"error": "Failed to store webhook"}), 500
+
+        return jsonify({
+            "proxy": f"{request.host_url}scriptguardian/webhooks/send/{path_id}"
+        }), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/scriptguardian/webhooks/send/<webhook_id>', methods=['POST'])
 def send_webhook(webhook_id):
