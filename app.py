@@ -79,42 +79,20 @@ def generate():
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
 
-    # Find all Discord webhook URLs
-    webhooks = re.findall(r"https://discord\.com/api/webhooks/[^\s\"']+", script_content)
-    replacements = {}
-
-    for webhook in set(webhooks):
-        # Check if it already exists
-        existing = supabase.table("discord_webhooks").select("id").eq("webhook", webhook).execute()
-        if existing.data:
-            webhook_id = existing.data[0]['id']
-        else:
-            webhook_id = uuid.uuid4().hex[:12]
-            insert = supabase.table("discord_webhooks").insert({
-                "id": webhook_id,
-                "webhook": webhook,
-                "created_at": "now()"
-            }).execute()
-            if insert.error:
-                return jsonify({"error": "Failed to store webhook"}), 500
-
-        proxy_url = f"{request.host_url}scriptguardian/webhooks/send/{webhook_id}"
-        replacements[webhook] = proxy_url
-
-    # Replace all found webhooks with proxy URLs
-    for original, proxy in replacements.items():
-        script_content = script_content.replace(original, proxy)
-
     obfuscation_result, success = obfuscate_lua_code(script_content)
 
     if not success:
         return jsonify(obfuscation_result), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
+    
+    # Generate script name
     script_name = custom_name if custom_name else uuid.uuid4().hex
-
-    # Ensure script name uniqueness
+    
+    # Check if script name already exists in Supabase
     existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
+    
+    # If script name exists, append a counter
     if existing_scripts.data:
         counter = 1
         while True:
@@ -125,7 +103,7 @@ def generate():
                 break
             counter += 1
 
-    # Store in Supabase
+    # Store script in Supabase
     supabase.table("scripts").insert({
         "name": script_name,
         "content": obfuscated_script,
@@ -133,9 +111,7 @@ def generate():
         "created_at": "now()"
     }).execute()
 
-    return jsonify({
-        "link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"
-    }), 200
+    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
@@ -156,54 +132,6 @@ def execute(script_name):
     
     return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
 
-@app.route('/scriptguardian/webhooks/create', methods=['POST'])
-def create_webhook():
-    try:
-        data = request.get_json(force=True)
-        original_webhook = data.get("webhook", "").strip()
-
-        if not original_webhook.startswith("https://discord.com/api/webhooks/"):
-            return jsonify({"error": "Invalid webhook URL"}), 400
-
-        # Check if webhook already exists
-        existing = supabase.table("discord_webhooks").select("id").eq("webhook", original_webhook).execute()
-
-        if existing.data:
-            path_id = existing.data[0]["id"]
-        else:
-            path_id = uuid.uuid4().hex[:12]
-            insert_result = supabase.table("discord_webhooks").insert({
-                "id": path_id,
-                "webhook": original_webhook,
-                "created_at": "now()"
-            }).execute()
-
-            if insert_result.error:
-                return jsonify({"error": "Failed to store webhook"}), 500
-
-        return jsonify({
-            "proxy": f"{request.host_url}scriptguardian/webhooks/send/{path_id}"
-        }), 201
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/scriptguardian/webhooks/send/<webhook_id>', methods=['POST'])
-def send_webhook(webhook_id):
-    try:
-        result = supabase.table("discord_webhooks").select("webhook").eq("id", webhook_id).execute()
-
-        if not result.data:
-            return jsonify({"error": "Webhook not found"}), 404
-
-        real_webhook = result.data[0]['webhook']
-
-        r = requests.post(real_webhook, json=request.json)
-        return '', r.status_code
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
@@ -223,4 +151,3 @@ def api_obfuscate():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-    
