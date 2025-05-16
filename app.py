@@ -158,17 +158,30 @@ def trigger_hidden_webhook(path_id):
     RATE_LIMIT[client_ip] = now
 
     try:
+        # Fetch webhook from Supabase
         result = supabase.table("discord_webhooks").select("webhook").eq("id", path_id).execute()
-        if not result.data:
+        if not result.data or not result.data[0].get("webhook"):
             return jsonify({"error": "Invalid webhook"}), 404
 
         webhook_url = result.data[0]["webhook"]
-        requests.post(webhook_url, json=request.get_json(force=True), timeout=3)
+        payload = request.get_json(force=True)
 
-        return jsonify({"status": "Webhook triggered"}), 200
+        # Discord requires content field for message
+        if "content" not in payload:
+            payload = {
+                "content": json.dumps(payload, indent=2)
+            }
 
-    except Exception:
-        return jsonify({"error": "Failed to send webhook"}), 500
+        # Actually post to the Discord webhook
+        discord_response = requests.post(webhook_url, json=payload, timeout=5)
+
+        if discord_response.status_code >= 200 and discord_response.status_code < 300:
+            return jsonify({"status": "Webhook triggered"}), 200
+        else:
+            return jsonify({"error": f"Discord webhook returned status code {discord_response.status_code}"}), 502
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to send webhook: {str(e)}"}), 500
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
