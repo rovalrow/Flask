@@ -152,13 +152,11 @@ def trigger_hidden_webhook(path_id):
     client_ip = request.remote_addr
     now = time.time()
 
-    # Rate limit (20s per IP)
     if client_ip in RATE_LIMIT and now - RATE_LIMIT[client_ip] < 20:
         return jsonify({"error": "Please wait before triggering again."}), 429
     RATE_LIMIT[client_ip] = now
 
     try:
-        # Fetch webhook from Supabase
         result = supabase.table("discord_webhooks").select("webhook").eq("id", path_id).execute()
         if not result.data or not result.data[0].get("webhook"):
             return jsonify({"error": "Invalid webhook"}), 404
@@ -166,16 +164,15 @@ def trigger_hidden_webhook(path_id):
         webhook_url = result.data[0]["webhook"]
         payload = request.get_json(force=True)
 
-        # Discord requires content field for message
         if "content" not in payload:
             payload = {
                 "content": json.dumps(payload, indent=2)
             }
 
-        # Actually post to the Discord webhook
-        discord_response = requests.post(webhook_url, json=payload, timeout=5)
+        headers = {'Content-Type': 'application/json'}
+        discord_response = requests.post(webhook_url, json=payload, headers=headers, timeout=5)
 
-        if discord_response.status_code >= 200 and discord_response.status_code < 300:
+        if 200 <= discord_response.status_code < 300:
             return jsonify({"status": "Webhook triggered"}), 200
         else:
             return jsonify({"error": f"Discord webhook returned status code {discord_response.status_code}"}), 502
