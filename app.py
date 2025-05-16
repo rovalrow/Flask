@@ -90,11 +90,17 @@ def generate():
         original_webhook = discord_webhook_match.group(0)
         path_id = uuid.uuid4().hex[:12]
 
-        supabase.table("discord_webhooks").insert({
-            "id": path_id,
-            "webhook": original_webhook,
-            "created_at": "now()"
-        }).execute()
+                # Check if webhook already exists
+        existing = supabase.table("discord_webhooks").select("id").eq("webhook", original_webhook).execute()
+        if existing.data:
+            path_id = existing.data[0]["id"]
+        else:
+            path_id = uuid.uuid4().hex[:12]
+            supabase.table("discord_webhooks").insert({
+                "id": path_id,
+                "webhook": original_webhook,
+                "created_at": "now()"
+            }).execute()
 
         script_content = script_content.replace(original_webhook, f"{request.host_url}scriptguardian/webhooks/{path_id}")
 
