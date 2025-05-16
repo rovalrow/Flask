@@ -4,12 +4,9 @@ import re
 import requests
 import uuid
 import json
-import time
 from supabase import create_client
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "0x4AAAAAABZAawAfCPe3waqvkG4X_MxVenY")
 
 # Supabase configuration
@@ -21,8 +18,6 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 OBFUSCATOR_API_KEY = os.environ.get("OBFUSCATOR_API_KEY", "bf4f5e8e-291b-2a5f-dc7f-2b5fabdeab1eb69f")
 NEW_SCRIPT_URL = "https://api.luaobfuscator.com/v1/obfuscator/newscript"
 OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
-
-RATE_LIMIT = {}
 
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
@@ -84,30 +79,20 @@ def generate():
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
 
-    discord_webhook_match = re.search(r'https://discord(?:app)?\.com/api/webhooks/\d+/[\w-]+', script_content)
-    if discord_webhook_match:
-        original_webhook = discord_webhook_match.group(0)
-        existing = supabase.table("discord_webhooks").select("id").eq("webhook", original_webhook).execute()
-        if existing.data:
-            path_id = existing.data[0]["id"]
-        else:
-            path_id = uuid.uuid4().hex[:12]
-            supabase.table("discord_webhooks").insert([{
-                "id": path_id,
-                "webhook": original_webhook,
-                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            }]).execute()
-
-        script_content = script_content.replace(original_webhook, f"{request.host_url}scriptguardian/webhooks/{path_id}")
-
     obfuscation_result, success = obfuscate_lua_code(script_content)
+
     if not success:
         return jsonify(obfuscation_result), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
+    
+    # Generate script name
     script_name = custom_name if custom_name else uuid.uuid4().hex
-
+    
+    # Check if script name already exists in Supabase
     existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
+    
+    # If script name exists, append a counter
     if existing_scripts.data:
         counter = 1
         while True:
@@ -118,62 +103,34 @@ def generate():
                 break
             counter += 1
 
-    supabase.table("scripts").insert([{
+    # Store script in Supabase
+    supabase.table("scripts").insert({
         "name": script_name,
         "content": obfuscated_script,
         "unobfuscated": script_content,
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    }]).execute()
+        "created_at": "now()"
+    }).execute()
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
+    # Get script from Supabase
     script_name = sanitize_filename(script_name)
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
-
+    
     if response.data:
         user_agent = request.headers.get("User-Agent", "").lower()
+
+        # Check if request is NOT from Roblox
         if not ("roblox" in user_agent or "robloxapp" in user_agent):
+            # Serve the Unauthorized HTML
             return render_template("unauthorized.html"), 403
 
+        # If User-Agent is Roblox, send raw Lua script
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
-
+    
     return 'game.Players.LocalPlayer:Kick("This Script is No Longer Existing on Our Database. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
-
-@app.route('/scriptguardian/webhooks/<path_id>', methods=['POST'])
-def trigger_hidden_webhook(path_id):
-    path_id = re.sub(r"[^a-zA-Z0-9]", "", path_id)
-    client_ip = request.remote_addr
-    now = time.time()
-
-    if client_ip in RATE_LIMIT and now - RATE_LIMIT[client_ip] < 20:
-        return jsonify({"error": "Please wait before triggering again."}), 429
-    RATE_LIMIT[client_ip] = now
-
-    try:
-        result = supabase.table("discord_webhooks").select("webhook").eq("id", path_id).execute()
-        if not result.data or not result.data[0].get("webhook"):
-            return jsonify({"error": "Invalid webhook"}), 404
-
-        webhook_url = result.data[0]["webhook"]
-        payload = request.get_json(force=True)
-
-        if "content" not in payload:
-            payload = {
-                "content": json.dumps(payload, indent=2)
-            }
-
-        headers = {'Content-Type': 'application/json'}
-        discord_response = requests.post(webhook_url, json=payload, headers=headers, timeout=5)
-
-        if 200 <= discord_response.status_code < 300:
-            return jsonify({"status": "Webhook triggered"}), 200
-        else:
-            return jsonify({"error": f"Discord webhook returned status code {discord_response.status_code}"}), 502
-
-    except Exception as e:
-        return jsonify({"error": f"Failed to send webhook: {str(e)}"}), 500
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
@@ -185,6 +142,7 @@ def api_obfuscate():
         return jsonify({"error": "No script provided"}), 400
 
     obfuscation_result, success = obfuscate_lua_code(script_content)
+
     if not success:
         return jsonify(obfuscation_result), 500
 
