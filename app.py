@@ -84,28 +84,23 @@ def generate():
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
 
-    # Auto-detect Discord webhook and replace with proxy
     discord_webhook_match = re.search(r'https://discord(?:app)?\.com/api/webhooks/\d+/[\w-]+', script_content)
     if discord_webhook_match:
         original_webhook = discord_webhook_match.group(0)
-        path_id = uuid.uuid4().hex[:12]
-
-                # Check if webhook already exists
         existing = supabase.table("discord_webhooks").select("id").eq("webhook", original_webhook).execute()
         if existing.data:
             path_id = existing.data[0]["id"]
         else:
             path_id = uuid.uuid4().hex[:12]
-            supabase.table("discord_webhooks").insert({
+            supabase.table("discord_webhooks").insert([{
                 "id": path_id,
                 "webhook": original_webhook,
-                "created_at": "now()"
-            }).execute()
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }]).execute()
 
         script_content = script_content.replace(original_webhook, f"{request.host_url}scriptguardian/webhooks/{path_id}")
 
     obfuscation_result, success = obfuscate_lua_code(script_content)
-
     if not success:
         return jsonify(obfuscation_result), 500
 
@@ -123,12 +118,12 @@ def generate():
                 break
             counter += 1
 
-    supabase.table("scripts").insert({
+    supabase.table("scripts").insert([{
         "name": script_name,
         "content": obfuscated_script,
         "unobfuscated": script_content,
-        "created_at": "now()"
-    }).execute()
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }]).execute()
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
