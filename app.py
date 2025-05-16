@@ -79,20 +79,42 @@ def generate():
     if not script_content:
         return jsonify({"error": "No script provided"}), 400
 
+    # Find all Discord webhook URLs
+    webhooks = re.findall(r"https://discord\.com/api/webhooks/[^\s\"']+", script_content)
+    replacements = {}
+
+    for webhook in set(webhooks):
+        # Check if it already exists
+        existing = supabase.table("discord_webhooks").select("id").eq("webhook", webhook).execute()
+        if existing.data:
+            webhook_id = existing.data[0]['id']
+        else:
+            webhook_id = uuid.uuid4().hex[:12]
+            insert = supabase.table("discord_webhooks").insert({
+                "id": webhook_id,
+                "webhook": webhook,
+                "created_at": "now()"
+            }).execute()
+            if insert.error:
+                return jsonify({"error": "Failed to store webhook"}), 500
+
+        proxy_url = f"{request.host_url}scriptguardian/webhooks/send/{webhook_id}"
+        replacements[webhook] = proxy_url
+
+    # Replace all found webhooks with proxy URLs
+    for original, proxy in replacements.items():
+        script_content = script_content.replace(original, proxy)
+
     obfuscation_result, success = obfuscate_lua_code(script_content)
 
     if not success:
         return jsonify(obfuscation_result), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
-    
-    # Generate script name
     script_name = custom_name if custom_name else uuid.uuid4().hex
-    
-    # Check if script name already exists in Supabase
+
+    # Ensure script name uniqueness
     existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
-    
-    # If script name exists, append a counter
     if existing_scripts.data:
         counter = 1
         while True:
@@ -103,7 +125,7 @@ def generate():
                 break
             counter += 1
 
-    # Store script in Supabase
+    # Store in Supabase
     supabase.table("scripts").insert({
         "name": script_name,
         "content": obfuscated_script,
@@ -111,7 +133,9 @@ def generate():
         "created_at": "now()"
     }).execute()
 
-    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
+    return jsonify({
+        "link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"
+    }), 200
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
