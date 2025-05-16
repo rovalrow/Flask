@@ -166,14 +166,17 @@ def create_webhook():
 
 @app.route('/scriptguardian/webhooks/send/<webhook_id>', methods=['POST'])
 def send_webhook(webhook_id):
-    result = supabase.table("webhooks").select("url").eq("id", webhook_id).execute()
-    if not result.data:
-        return jsonify({"error": "Webhook not found"}), 404
-
-    real_webhook = result.data[0]['url']
     try:
+        result = supabase.table("discord_webhooks").select("webhook").eq("id", webhook_id).execute()
+
+        if not result.data:
+            return jsonify({"error": "Webhook not found"}), 404
+
+        real_webhook = result.data[0]['webhook']
+
         r = requests.post(real_webhook, json=request.json)
         return '', r.status_code
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
