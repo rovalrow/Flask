@@ -115,22 +115,29 @@ def generate():
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
-    # Get script from Supabase
     script_name = sanitize_filename(script_name)
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
-    
+
     if response.data:
         user_agent = request.headers.get("User-Agent", "").lower()
 
-        # Check if request is NOT from Roblox
+        # Block browser requests
         if not ("roblox" in user_agent or "robloxapp" in user_agent):
-            # Serve the Unauthorized HTML
             return render_template("unauthorized.html"), 403
 
-        # If User-Agent is Roblox, send raw Lua script
+        # ✅ Increment total executions
+        supabase.rpc("increment_execution_count").execute()
+
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
-    
-    return 'game.Players.LocalPlayer:Kick("This script is outdated and needed to be generated again. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
+
+    return 'game.Players.LocalPlayer:Kick("This script is outdated...")', 200, {'Content-Type': 'text/plain'}
+
+@app.route('/get-total-executions')
+def get_total_executions():
+    response = supabase.table("executions").select("count").eq("id", 1).execute()
+    if response.data:
+        return jsonify({"count": response.data[0]['count']})
+    return jsonify({"count": 0})  
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
