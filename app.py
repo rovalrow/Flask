@@ -22,6 +22,10 @@ OBFUSCATE_URL = "https://api.luaobfuscator.com/v1/obfuscator/obfuscate"
 def sanitize_filename(name):
     return re.sub(r"[^a-zA-Z0-9_-]", "", name)
 
+def cleanup_inactive_users():
+    cutoff = (datetime.utcnow() - timedelta(minutes=2)).isoformat()
+    supabase.table("active_users").delete().lt("last_seen", cutoff).execute()
+
 def obfuscate_lua_code(code):
     try:
         new_script_headers = {
@@ -65,6 +69,21 @@ def obfuscate_lua_code(code):
 
     except Exception as e:
         return {"error": str(e)}, False
+
+@app.before_request
+def update_active_user():
+    # Assign session ID if not already set
+    if "user_id" not in session:
+        session["user_id"] = str(uuid.uuid4())
+
+    session_id = session["user_id"]
+
+    # Update or insert last_seen
+    now = datetime.utcnow().isoformat()
+    supabase.table("active_users").upsert({
+        "session_id": session_id,
+        "last_seen": now
+    }).execute()
 
 @app.route('/')
 def home():
@@ -139,6 +158,13 @@ def get_total_executions():
         return jsonify({"count": response.data[0]['count']})
     return jsonify({"count": 0})  
 
+@app.route('/get-live-users')
+def get_live_users():
+    cleanup_inactive_users()
+    response = supabase.table("active_users").select("*").execute()
+    count = len(response.data) if response.data else 0
+    return jsonify({"count": count})
+    
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
