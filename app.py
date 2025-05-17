@@ -120,21 +120,14 @@ def execute(script_name):
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
     
     if response.data:
-        headers = request.headers
-        user_agent = headers.get("User-Agent", "").lower()
-        game_id = headers.get("Roblox-Game-Id")
-        session_id = headers.get("Roblox-Session-Id")
+        user_agent = request.headers.get("User-Agent", "").lower()
 
-        # Enforce all conditions:
-        if not (
-            ("roblox" in user_agent or "robloxapp" in user_agent)
-            and game_id is not None
-            and session_id is not None
-        ):
+        # Check if request is NOT from Roblox
+        if not ("roblox" in user_agent or "robloxapp" in user_agent):
             # Serve the Unauthorized HTML
             return render_template("unauthorized.html"), 403
 
-        # If all checks pass, send raw Lua script
+        # If User-Agent is Roblox, send raw Lua script
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
     
     return 'game.Players.LocalPlayer:Kick("This script is outdated and needed to be generated again. Please Contact the Developer of the Script.")', 200, {'Content-Type': 'text/plain'}
