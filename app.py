@@ -1,10 +1,9 @@
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template
 import os
 import re
 import requests
 import uuid
 import json
-from datetime import datetime, timedelta  # ✅ Missing import
 from supabase import create_client
 
 app = Flask(__name__)
@@ -73,12 +72,14 @@ def obfuscate_lua_code(code):
 
 @app.before_request
 def update_active_user():
+    # Assign session ID if not already set
     if "user_id" not in session:
         session["user_id"] = str(uuid.uuid4())
 
     session_id = session["user_id"]
-    now = datetime.utcnow().isoformat()
 
+    # Update or insert last_seen
+    now = datetime.utcnow().isoformat()
     supabase.table("active_users").upsert({
         "session_id": session_id,
         "last_seen": now
@@ -103,10 +104,14 @@ def generate():
         return jsonify(obfuscation_result), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
+    
+    # Generate script name
     script_name = custom_name if custom_name else uuid.uuid4().hex
-
+    
+    # Check if script name already exists in Supabase
     existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
-
+    
+    # If script name exists, append a counter
     if existing_scripts.data:
         counter = 1
         while True:
@@ -117,6 +122,7 @@ def generate():
                 break
             counter += 1
 
+    # Store script in Supabase
     supabase.table("scripts").insert({
         "name": script_name,
         "content": obfuscated_script,
@@ -133,10 +139,14 @@ def execute(script_name):
 
     if response.data:
         user_agent = request.headers.get("User-Agent", "").lower()
+
+        # Block browser requests
         if not ("roblox" in user_agent or "robloxapp" in user_agent):
             return render_template("unauthorized.html"), 403
 
+        # ✅ Increment total executions
         supabase.rpc("increment_execution_count").execute()
+
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
 
     return 'game.Players.LocalPlayer:Kick("This script is outdated...")', 200, {'Content-Type': 'text/plain'}
@@ -154,7 +164,11 @@ def get_live_users():
     response = supabase.table("active_users").select("*").execute()
     count = len(response.data) if response.data else 0
     return jsonify({"count": count})
-    
+
+@app.route('/ads.txt')
+def ads():
+    return send_from_directory('static', 'ads.txt')
+
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
