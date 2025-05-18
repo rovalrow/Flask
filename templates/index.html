@@ -533,17 +533,32 @@ updateExecutionCount();
 setInterval(updateExecutionCount, 1000);
 
 async function updateLiveUsers() {
-    try {
-        let response = await fetch('/get-live-users');
-        let data = await response.json();
-        document.getElementById("LiveUser").textContent = `User's: ${data.count}`;
-    } catch (error) {
-        console.error("Failed to fetch live users:", error);
-    }
+    try {
+        let response = await fetch('/get-live-users');
+        let data = await response.json();
+        document.getElementById("LiveUser").textContent = `User's: ${data.count}`;
+    } catch (error) {
+        console.error("Live user update failed:", error);
+    }
 }
 
+async function sendHeartbeat() {
+    try {
+        await fetch('/heartbeat', { method: 'POST' });
+    } catch (error) {
+        console.error("Heartbeat failed:", error);
+    }
+}
+
+// Every second: heartbeat + update count
+setInterval(() => {
+    sendHeartbeat();
+    updateLiveUsers();
+}, 1000);
+
+// Optional: Run once at start
+sendHeartbeat();
 updateLiveUsers();
-setInterval(updateLiveUsers, 1000);
     </script>
 </body>
 </html>
