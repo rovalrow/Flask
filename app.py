@@ -126,6 +126,47 @@ def generate():
 
     return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
 
+@app.route('/api/botghost/generate', methods=['POST'])
+def botghost_generate():
+    data = request.get_json()
+    script_content = data.get("script", "").strip()
+    custom_name = sanitize_filename(data.get("name", "").strip())
+
+    if not script_content:
+        return jsonify({"status": "error", "message": "No script provided"}), 400
+
+    obfuscation_result, success = obfuscate_lua_code(script_content)
+    if not success:
+        return jsonify({"status": "error", "message": obfuscation_result.get("error", "Obfuscation failed")}), 500
+
+    obfuscated_script = obfuscation_result["obfuscated_code"]
+    script_name = custom_name if custom_name else uuid.uuid4().hex
+
+    existing_scripts = supabase.table("scripts").select("name").eq("name", script_name).execute()
+    if existing_scripts.data:
+        counter = 1
+        while True:
+            new_name = f"{script_name}{counter}"
+            name_check = supabase.table("scripts").select("name").eq("name", new_name).execute()
+            if not name_check.data:
+                script_name = new_name
+                break
+            counter += 1
+
+    supabase.table("scripts").insert({
+        "name": script_name,
+        "content": obfuscated_script,
+        "unobfuscated": script_content,
+        "created_at": datetime.utcnow().isoformat()
+    }).execute()
+
+    return jsonify({
+        "status": "success",
+        "name": script_name,
+        "linkcode": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}",
+        "obfuscated_code": obfuscated_script
+    }), 200
+
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
     script_name = sanitize_filename(script_name)
