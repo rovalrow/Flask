@@ -135,6 +135,26 @@ def botghost_generate():
     if not script_content:
         return jsonify({"status": "error", "message": "No script provided"}), 400
 
+    # Detect Discord webhook
+    webhook_match = re.search(r'https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+', script_content)
+    if webhook_match:
+        webhook_url = webhook_match.group(0)
+
+        # Generate an ID for proxy
+        webhook_id = str(uuid.uuid4())
+
+        # Save real webhook to Supabase
+        supabase.table("webhooks").insert({
+            "id": webhook_id,
+            "webhook_url": webhook_url,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
+
+        # Replace real webhook in script with proxy
+        proxy_url = f"{request.host_url}scriptguardian/webhook/{webhook_id}"
+        script_content = script_content.replace(webhook_url, proxy_url)
+
+    # Obfuscate the script
     obfuscation_result, success = obfuscate_lua_code(script_content)
     if not success:
         return jsonify({"status": "error", "message": obfuscation_result.get("error", "Obfuscation failed")}), 500
