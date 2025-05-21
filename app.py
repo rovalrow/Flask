@@ -229,7 +229,7 @@ def oldservers():
         return "Missing GameId", 400
 
     try:
-        url = f"https://games.roproxy.com/v1/games/{game_id}/servers/Public?sortOrder=Asc&limit=100"
+        url = f"https://games.roblox.com/v1/games/{game_id}/servers/Public?sortOrder=Asc&limit=100"
         res = requests.get(url)
         if res.status_code != 200:
             return "Failed to fetch servers", 500
