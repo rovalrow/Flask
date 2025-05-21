@@ -187,6 +187,20 @@ def botghost_generate():
         "obfuscated_code": obfuscated_script
     }), 200
 
+@app.route('/scriptguardian/webhook/<webhook_id>', methods=['POST'])
+def proxy_webhook(webhook_id):
+    result = supabase.table("webhooks").select("webhook_url").eq("id", webhook_id).execute()
+    if not result.data:
+        return jsonify({"error": "Webhook not found"}), 404
+
+    webhook_url = result.data[0]["webhook_url"]
+
+    # Forward the JSON payload to the real webhook
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(webhook_url, headers=headers, json=request.get_json())
+
+    return jsonify({"status": "forwarded", "response_status": response.status_code}), response.status_code
+
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
     script_name = sanitize_filename(script_name)
