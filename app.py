@@ -215,32 +215,45 @@ def heartbeat():
 
     return "", 204
 
-@app.route('/swertres-today')
-def swertres_today():
-    url = "https://www.lottopcso.com/swertres-result-today/"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    result_table = soup.find("table")
-    results = {}
-
-    if result_table:
-        rows = result_table.find_all("tr")[1:]  # skip header
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) == 2:
-                time = cols[0].get_text(strip=True).upper().replace(":", ":", 1)
-                value = cols[1].get_text(strip=True)
-                if value.replace("-", "").isdigit() and len(value.replace("-", "")) == 3:
-                    results[time] = value
-                else:
-                    results[time] = f"text: {value}"
-
-    return jsonify(results)
-
 @app.route('/ads.txt')
 def ads():
     return send_from_directory('static', 'ads.txt')
+
+@app.route("/oldservers", methods=["GET"])
+def oldservers():
+    import requests
+    from flask import request
+
+    game_id = request.args.get("gameId")
+    if not game_id:
+        return "Missing GameId", 400
+
+    try:
+        url = f"https://games.roblox.com/v1/games/{game_id}/servers/Public?sortOrder=Asc&limit=100"
+        res = requests.get(url)
+        if res.status_code != 200:
+            return "Failed to fetch servers", 500
+
+        data = res.json()
+        servers = [
+            s for s in data.get("data", [])
+            if s.get("playing", 0) > 0
+        ]
+
+        if not servers:
+            return "No active servers found.", 200
+
+        # Sort by oldest (creation date if available)
+        servers.sort(key=lambda x: x.get("created", ""))
+
+        best_server = servers[0]
+        job_id = best_server.get("id")
+        server_id_short = job_id[:4]  # Your example uses first 4 chars
+
+        return f"Server Job Id - `{job_id}`\nServerId - {server_id_short}"
+
+    except Exception as e:
+        return f"Error: {str(e)}", 500
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
