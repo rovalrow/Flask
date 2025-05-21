@@ -224,12 +224,12 @@ def oldservers():
     import requests
     from flask import request
 
-    game_id = request.args.get("option_gameid")
+    game_id = request.args.get("gameId")
     if not game_id:
         return "Missing GameId", 400
 
     try:
-        url = f"https://games.roproxy.com/v1/games/{option_gameid}/servers/Public?sortOrder=Asc&limit=100"
+        url = f"https://games.roproxy.com/v1/games/{game_id}/servers/Public?sortOrder=Asc&limit=100"
         res = requests.get(url)
         if res.status_code != 200:
             return "Failed to fetch servers", 500
