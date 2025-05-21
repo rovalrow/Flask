@@ -224,12 +224,12 @@ def oldservers():
     import requests
     from flask import request
 
-    game_id = request.args.get("gameId")
+    game_id = request.args.get("option_gameid")
     if not game_id:
         return "Missing GameId", 400
 
     try:
-        url = f"https://games.roblox.com/v1/games/{game_id}/servers/Public?sortOrder=Asc&limit=100"
+        url = f"https://games.roproxy.com/v1/games/{option_gameid}/servers/Public?sortOrder=Asc&limit=100"
         res = requests.get(url)
         if res.status_code != 200:
             return "Failed to fetch servers", 500
@@ -243,14 +243,14 @@ def oldservers():
         if not servers:
             return "No active servers found.", 200
 
-        # Sort by oldest (creation date if available)
+        # Sort by oldest created time
         servers.sort(key=lambda x: x.get("created", ""))
 
         best_server = servers[0]
         job_id = best_server.get("id")
-        server_id_short = job_id[:4]  # Your example uses first 4 chars
+        server_version = best_server.get("serverVersion", "Unknown")
 
-        return f"Server Job Id - `{job_id}`\nServerId - {server_id_short}"
+        return f"Server Job Id - `{job_id}`\nServer Version - {server_version}"
 
     except Exception as e:
         return f"Error: {str(e)}", 500
