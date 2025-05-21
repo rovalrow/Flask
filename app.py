@@ -135,26 +135,6 @@ def botghost_generate():
     if not script_content:
         return jsonify({"status": "error", "message": "No script provided"}), 400
 
-    # Detect Discord webhook
-    webhook_match = re.search(r'https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+', script_content)
-    if webhook_match:
-        webhook_url = webhook_match.group(0)
-
-        # Generate an ID for proxy
-        webhook_id = str(uuid.uuid4())
-
-        # Save real webhook to Supabase
-        supabase.table("webhooks").insert({
-            "id": webhook_id,
-            "webhook_url": webhook_url,
-            "created_at": datetime.utcnow().isoformat()
-        }).execute()
-
-        # Replace real webhook in script with proxy
-        proxy_url = f"{request.host_url}scriptguardian/webhook/{webhook_id}"
-        script_content = script_content.replace(webhook_url, proxy_url)
-
-    # Obfuscate the script
     obfuscation_result, success = obfuscate_lua_code(script_content)
     if not success:
         return jsonify({"status": "error", "message": obfuscation_result.get("error", "Obfuscation failed")}), 500
@@ -186,20 +166,6 @@ def botghost_generate():
         "linkcode": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}",
         "obfuscated_code": obfuscated_script
     }), 200
-
-@app.route('/scriptguardian/webhook/<webhook_id>', methods=['POST'])
-def proxy_webhook(webhook_id):
-    result = supabase.table("webhooks").select("webhook_url").eq("id", webhook_id).execute()
-    if not result.data:
-        return jsonify({"error": "Webhook not found"}), 404
-
-    webhook_url = result.data[0]["webhook_url"]
-
-    # Forward the JSON payload to the real webhook
-    headers = {"Content-Type": "application/json"}
-    response = requests.post(webhook_url, headers=headers, json=request.get_json())
-
-    return jsonify({"status": "forwarded", "response_status": response.status_code}), response.status_code
 
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
@@ -248,6 +214,29 @@ def heartbeat():
     }).execute()
 
     return "", 204
+
+@app.route('/swertres-today')
+def swertres_today():
+    url = "https://www.lottopcso.com/swertres-result-today/"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    result_table = soup.find("table")
+    results = {}
+
+    if result_table:
+        rows = result_table.find_all("tr")[1:]  # skip header
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) == 2:
+                time = cols[0].get_text(strip=True).upper().replace(":", ":", 1)
+                value = cols[1].get_text(strip=True)
+                if value.replace("-", "").isdigit() and len(value.replace("-", "")) == 3:
+                    results[time] = value
+                else:
+                    results[time] = f"text: {value}"
+
+    return jsonify(results)
 
 @app.route('/ads.txt')
 def ads():
