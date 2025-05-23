@@ -292,7 +292,7 @@ def proxy_webhook(webhook_id):
 
     return jsonify({"status": "forwarded", "response_status": response.status_code}), response.status_code
 
-@app.route('/3dresults')
+@app.route('/3dresults', methods=['GET', 'POST'])
 def fetch_3d_results():
     url = 'https://www.lottopcso.com/swertres-result-today/'
     response = requests.get(url)
@@ -309,7 +309,7 @@ def fetch_3d_results():
                 results.append(f"{time} | {value}")
 
     return '\n'.join(results)
-   
+
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
