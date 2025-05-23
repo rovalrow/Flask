@@ -157,7 +157,10 @@ def botghost_generate():
     # Obfuscate the script
     obfuscation_result, success = obfuscate_lua_code(script_content)
     if not success:
-        return jsonify({"status": "error", "message": obfuscation_result.get("error", "Obfuscation failed")}), 500
+        return jsonify({
+            "status": "error",
+            "message": obfuscation_result.get("error", "Obfuscation failed")
+        }), 500
 
     obfuscated_script = obfuscation_result["obfuscated_code"]
     script_name = custom_name if custom_name else uuid.uuid4().hex
