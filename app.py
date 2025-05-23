@@ -292,6 +292,24 @@ def proxy_webhook(webhook_id):
 
     return jsonify({"status": "forwarded", "response_status": response.status_code}), response.status_code
 
+@app.route('/3dresults')
+def fetch_3d_results():
+    url = 'https://www.lottopcso.com/swertres-result-today/'
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    results = []
+    tbody = soup.find('tbody')
+    if tbody:
+        for row in tbody.find_all('tr'):
+            cols = row.find_all('td')
+            if len(cols) == 2:
+                time = cols[0].get_text(strip=True)
+                value = cols[1].get_text(strip=True).replace('\u2026', '...')
+                results.append(f"{time} | {value}")
+
+    return '\n'.join(results)
+   
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
