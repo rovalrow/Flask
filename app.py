@@ -292,23 +292,44 @@ def proxy_webhook(webhook_id):
 
     return jsonify({"status": "forwarded", "response_status": response.status_code}), response.status_code
 
-@app.route('/3dresults', methods=['GET', 'POST'])
-def fetch_3d_results():
-    url = 'https://www.lottopcso.com/swertres-result-today/'
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+@app.route('/notify', methods=['POST'])
+def notify():
+    # Step 1: Parse JSON and get message content
+    data = request.json
+    message = data.get("message")
+    if not message:
+        return jsonify({"status": "error", "message": "Missing 'message' parameter."}), 400
 
-    results = []
-    tbody = soup.find('tbody')
-    if tbody:
-        for row in tbody.find_all('tr'):
-            cols = row.find_all('td')
-            if len(cols) == 2:
-                time = cols[0].get_text(strip=True)
-                value = cols[1].get_text(strip=True).replace('\u2026', '...')
-                results.append(f"{time} | {value}")
+    # Step 2: Fetch all scripts from Supabase
+    res = supabase.table("scripts").select("unobfuscated").execute()
+    if not res.data:
+        return jsonify({"status": "error", "message": "No scripts found."}), 404
 
-    return '\n'.join(results)
+    # Step 3: Find Discord webhooks in unobfuscated scripts
+    webhook_pattern = r"https:\/\/discord\.com\/api\/webhooks\/[^\s\"']+"
+    found_webhooks = set()
+
+    for row in res.data:
+        content = row.get("unobfuscated", "")
+        matches = re.findall(webhook_pattern, content)
+        found_webhooks.update(matches)
+
+    # Step 4: Send the message to each webhook
+    success = 0
+    for webhook_url in found_webhooks:
+        try:
+            response = requests.post(webhook_url, json={"content": message})
+            if response.ok:
+                success += 1
+        except Exception as e:
+            print(f"Failed to send to {webhook_url}: {e}")
+
+    return jsonify({
+        "status": "done",
+        "message_sent": message,
+        "sent_count": success,
+        "total_webhooks_found": len(found_webhooks)
+    })
 
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
