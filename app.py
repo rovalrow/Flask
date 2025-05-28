@@ -294,18 +294,20 @@ def proxy_webhook(webhook_id):
 
 @app.route('/notify', methods=['POST'])
 def notify():
-    # Step 1: Parse JSON and get message content
     data = request.json
     message = data.get("message")
+
     if not message:
         return jsonify({"status": "error", "message": "Missing 'message' parameter."}), 400
 
-    # Step 2: Fetch all scripts from Supabase
-    res = supabase.table("scripts").select("unobfuscated").execute()
+    try:
+        res = supabase.table("scripts").select("unobfuscated").execute()
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Supabase error: {e}"}), 500
+
     if not res.data:
         return jsonify({"status": "error", "message": "No scripts found."}), 404
 
-    # Step 3: Find Discord webhooks in unobfuscated scripts
     webhook_pattern = r"https:\/\/discord\.com\/api\/webhooks\/[^\s\"']+"
     found_webhooks = set()
 
@@ -314,7 +316,6 @@ def notify():
         matches = re.findall(webhook_pattern, content)
         found_webhooks.update(matches)
 
-    # Step 4: Send the message to each webhook
     success = 0
     for webhook_url in found_webhooks:
         try:
@@ -322,7 +323,7 @@ def notify():
             if response.ok:
                 success += 1
         except Exception as e:
-            print(f"Failed to send to {webhook_url}: {e}")
+            print(f"[ERROR] Failed to send to {webhook_url}: {e}")
 
     return jsonify({
         "status": "done",
