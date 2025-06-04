@@ -89,6 +89,52 @@ def update_active_user():
 def home():
     return render_template("index.html")
 
+@app.route('/api/send', methods=['POST'])
+def api_send():
+    data = request.get_json()
+    message = data.get("text", "").strip()
+
+    if not message:
+        return jsonify({"status": "error", "message": "Missing 'text' field in JSON body."}), 400
+
+    # Regex pattern to detect Discord webhooks
+    webhook_pattern = re.compile(r'https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+')
+
+    try:
+        # Fetch all scripts
+        response = supabase.table("scripts").select("unobfuscated").execute()
+        if not response.data:
+            return jsonify({"status": "error", "message": "No scripts found in the table."}), 404
+
+        webhooks_sent = set()
+        all_webhooks_found = []
+
+        # Search each script's unobfuscated content for Discord webhooks
+        for script in response.data:
+            unobfuscated = script.get("unobfuscated", "")
+            found_hooks = webhook_pattern.findall(unobfuscated)
+            all_webhooks_found.extend(found_hooks)
+
+            for hook in found_hooks:
+                if hook not in webhooks_sent:
+                    try:
+                        webhook_payload = {
+                            "content": message
+                        }
+                        webhook_response = requests.post(hook, json=webhook_payload, timeout=5)
+                        if webhook_response.status_code == 204:
+                            webhooks_sent.add(hook)
+                    except requests.exceptions.RequestException:
+                        continue  # Skip failed webhooks
+
+        return jsonify({
+            "status": "success",
+            "message": f"Fetch {len(all_webhooks_found)} and Sended to {len(webhooks_sent)}"
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+        
 @app.route('/generate', methods=['POST'])
 def generate():
     data = request.json
