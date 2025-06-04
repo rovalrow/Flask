@@ -97,44 +97,43 @@ def api_send():
     if not message:
         return jsonify({"status": "error", "message": "Missing 'text' field in JSON body."}), 400
 
-    # Regex pattern to detect Discord webhooks
-    webhook_pattern = re.compile(r'https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+')
+    # Regex to extract webhook URLs inside quotes like: Webhook = "https://discord.com/api/webhooks/..."
+    webhook_pattern = re.compile(r'Webhook\s*=\s*"?(https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+)"?')
 
     try:
-        # Fetch all scripts
         response = supabase.table("scripts").select("unobfuscated").execute()
-        if not response.data:
-            return jsonify({"status": "error", "message": "No scripts found in the table."}), 404
+        script_rows = response.data  # already a list of dicts
+
+        if not script_rows:
+            return jsonify({"status": "error", "message": "No scripts found."}), 404
 
         webhooks_sent = set()
         all_webhooks_found = []
 
-        # Search each script's unobfuscated content for Discord webhooks
-        for script in response.data:
+        for script in script_rows:
             unobfuscated = script.get("unobfuscated", "")
             found_hooks = webhook_pattern.findall(unobfuscated)
-            all_webhooks_found.extend(found_hooks)
 
             for hook in found_hooks:
+                hook = hook.strip()
+                all_webhooks_found.append(hook)
+
                 if hook not in webhooks_sent:
                     try:
-                        webhook_payload = {
-                            "content": message
-                        }
-                        webhook_response = requests.post(hook, json=webhook_payload, timeout=5)
-                        if webhook_response.status_code == 204:
+                        res = requests.post(hook, json={"content": message}, timeout=5)
+                        if res.status_code == 204:
                             webhooks_sent.add(hook)
                     except requests.exceptions.RequestException:
-                        continue  # Skip failed webhooks
+                        continue  # Ignore failed requests
 
         return jsonify({
             "status": "success",
-            "message": f"Fetch {len(all_webhooks_found)} and Sended to {len(webhooks_sent)}"
+            "message": f"Found {len(all_webhooks_found)} webhook(s), Sent to {len(webhooks_sent)} successfully."
         }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-        
+
 @app.route('/generate', methods=['POST'])
 def generate():
     data = request.json
