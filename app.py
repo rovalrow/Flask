@@ -153,8 +153,9 @@ def create_trax():
     # Fetch the ID
     script_id = insert_result.data[0]["id"]
 
-    # Return raw paste-like response
-    return f"{request.host_url}api/trax/raw/{script_id}", 200
+return jsonify({
+    "link": f"https://scriptguardian.onrender.com/api/trax/raw/{inserted_id}"
+}), 200
 
 @app.route('/api/trax/raw/<uuid:item_id>', methods=['GET'])
 def view_trax_raw(item_id):
