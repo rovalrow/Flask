@@ -136,8 +136,9 @@ def api_send():
 
 @app.route('/api/trax/create', methods=['POST'])
 def create_trax():
-    script = request.get_data(as_text=True).strip()
-    
+    data = request.get_json()
+    script = data.get("content") if data else None
+
     if not script:
         return "No content provided", 400
 
@@ -150,12 +151,11 @@ def create_trax():
     if insert_result.status_code != 201:
         return "Failed to save script", 500
 
-    # Fetch the ID
     script_id = insert_result.data[0]["id"]
 
-return jsonify({
-    "link": f"https://scriptguardian.onrender.com/api/trax/raw/{inserted_id}"
-}), 200
+    return jsonify({
+        "link": f"https://scriptguardian.onrender.com/api/trax/raw/{script_id}"
+    }), 200
 
 @app.route('/api/trax/raw/<uuid:item_id>', methods=['GET'])
 def view_trax_raw(item_id):
