@@ -134,6 +134,37 @@ def api_send():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/trax/create', methods=['POST'])
+def create_trax():
+    script = request.get_data(as_text=True).strip()
+    
+    if not script:
+        return "No content provided", 400
+
+    # Insert into Supabase
+    insert_result = supabase.table("items").insert({
+        "content": script,
+        "created_at": datetime.utcnow().isoformat()
+    }).execute()
+
+    if insert_result.status_code != 201:
+        return "Failed to save script", 500
+
+    # Fetch the ID
+    script_id = insert_result.data[0]["id"]
+
+    # Return raw paste-like response
+    return f"{request.host_url}api/trax/raw/{script_id}", 200
+
+@app.route('/api/trax/raw/<uuid:item_id>', methods=['GET'])
+def view_trax_raw(item_id):
+    result = supabase.table("items").select("content").eq("id", str(item_id)).execute()
+
+    if not result.data:
+        return "Not found", 404
+
+    return result.data[0]["content"], 200, {'Content-Type': 'text/plain'}
+    
 @app.route('/generate', methods=['POST'])
 def generate():
     data = request.json
