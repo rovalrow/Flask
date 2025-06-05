@@ -142,7 +142,6 @@ def create_trax():
     if not script:
         return "No content provided", 400
 
-    # Insert into Supabase
     insert_result = supabase.table("items").insert({
         "content": script,
         "created_at": datetime.utcnow().isoformat()
