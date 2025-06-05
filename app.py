@@ -142,19 +142,25 @@ def create_trax():
     if not script:
         return "No content provided", 400
 
-    insert_result = supabase.table("items").insert({
-        "content": script,
-        "created_at": datetime.utcnow().isoformat()
-    }).execute()
+    try:
+        insert_result = supabase.table("items").insert({
+            "content": script,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
+        
+        if insert_result.status_code != 201:
+            print("Supabase insert error:", insert_result)
+            return "Failed to save script", 500
 
-    if insert_result.status_code != 201:
-        return "Failed to save script", 500
+        script_id = insert_result.data[0]["id"]
 
-    script_id = insert_result.data[0]["id"]
+        return jsonify({
+            "link": f"https://scriptguardian.onrender.com/api/trax/raw/{script_id}"
+        }), 200
 
-    return jsonify({
-        "link": f"https://scriptguardian.onrender.com/api/trax/raw/{script_id}"
-    }), 200
+    except Exception as e:
+        print("Server error:", str(e))
+        return "Internal Server Error", 500
 
 @app.route('/api/trax/raw/<uuid:item_id>', methods=['GET'])
 def view_trax_raw(item_id):
