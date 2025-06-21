@@ -1,161 +1,230 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta content="width=device-width,initial-scale=1" name="viewport">
-    <title>Unauthorized</title>
-    <style>
-      body {
-            font-family: Arial, sans-serif;
-            background: #020c1b;
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-            position: relative;
-        }
+<head>
+  <meta charset="UTF-8" />
+  <meta content="width=device-width, initial-scale=1" name="viewport" />
+  <title>Unauthorized</title>
+  <style>
+    :root {
+      --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      --accent-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --text-primary: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.8);
+      --text-accent: #00f2fe;
+      --shadow-primary: 0 8px 32px rgba(31, 38, 135, 0.37);
+    }
 
-      .container {
-        text-align: center;
-        padding: 20px;
-        background: rgba(255, 255, 255, 0);
-        border-radius: 10px;
-        box-shadow: 0 8px 15px transparent
-      }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-      .brand {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin-bottom: 20px
-      }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(45deg, #0c0c0c, #1a1a2e, #16213e, #0f3460);
+      background-size: 400% 400%;
+      animation: gradientShift 15s ease infinite;
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding-bottom: 60px;
+    }
 
-      .brand-text {
-        font-size: 18px;
-        font-weight: 600;
-        color: #fff;
-        margin-top: 5px
-      }
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
 
-      h1 {
-        font-size: 24px;
-        margin-bottom: 10px
-      }
+    .geometric-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
 
-      p {
-        font-size: 16px;
-        color: #d1d1d1
-      }
-        .star {
-            position: absolute;
-            width: 2px;
-            height: 2px;
-            background: white;
-            border-radius: 50%;
-            animation: moveStar linear infinite;
-        }
+    .shape {
+      position: absolute;
+      opacity: 0.1;
+      animation: rotate 20s linear infinite;
+    }
 
-        @keyframes moveStar {
-            0% { transform: translateY(0); opacity: 1; }
-            100% { transform: translateY(100vh); opacity: 0; }
-        }
+    .shape:nth-child(1) {
+      top: 10%;
+      left: 10%;
+      width: 100px;
+      height: 100px;
+      background: var(--accent-gradient);
+      border-radius: 20px;
+      animation-duration: 25s;
+    }
 
-        .shooting-star {
-            position: absolute;
-            width: 3px;
-            height: 3px;
-            background: white;
-            box-shadow: 0 0 10px white;
-            border-radius: 50%;
-            animation: shootingStar linear 2s;
-        }
+    .shape:nth-child(2) {
+      top: 60%;
+      right: 10%;
+      width: 80px;
+      height: 80px;
+      background: var(--secondary-gradient);
+      border-radius: 50%;
+      animation-duration: 30s;
+      animation-direction: reverse;
+    }
 
-        @keyframes shootingStar {
-            0% { transform: translateX(100vw) translateY(-50px); opacity: 1; }
-            100% { transform: translateX(-10vw) translateY(50vh); opacity: 0; }
-        }
+    .shape:nth-child(3) {
+      bottom: 20%;
+      left: 20%;
+      width: 60px;
+      height: 60px;
+      background: var(--primary-gradient);
+      transform: rotate(45deg);
+      animation-duration: 35s;
+    }
 
-        .meteor {
-            position: absolute;
-            width: 15px;
-            height: 15px;
-            background: orange;
-            box-shadow: 0 0 15px orange;
-            border-radius: 50%;
-            animation: meteorFall linear 3s;
-        }
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
 
-        @keyframes meteorFall {
-            0% { transform: translateX(100vw) translateY(-10vh); opacity: 1; }
-            100% { transform: translateX(-10vw) translateY(100vh); opacity: 0; }
-        }
-    </style>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer="defer"></script>
-  </head>
-  <body>
-  	<div class="stars"></div>
-  <div class="meteors"></div>
-  <div class="shooting-stars"></div>
-  
-    <div id="captchaContainer" style="position:fixed;top:0;left:0;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);z-index:20">
-      <div class="container show" style="max-width:400px;width:90%;box-shadow:0 0 20px rgba(0,255,255,.8)">
-        <h1 style="margin-bottom:20px">Verifying You’re Human...</h1>
-        <div class="cf-turnstile" data-sitekey="0x4AAAAAABZAaxOPTU1WimRl" data-callback="onCaptchaSuccess" data-theme="dark"></div>
+    .container {
+      z-index: 5;
+      text-align: center;
+      padding: 40px 20px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      max-width: 500px;
+      backdrop-filter: blur(15px);
+      box-shadow: var(--shadow-primary);
+      display: none;
+    }
+
+    .container.show {
+      display: block;
+      animation: fadeIn 0.5s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .brand-text {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      color: var(--text-accent);
+    }
+
+    h1 {
+      font-size: 26px;
+      margin-bottom: 10px;
+    }
+
+    p {
+      font-size: 16px;
+      color: var(--text-secondary);
+    }
+
+    .ad-banner {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 50px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      z-index: 1000;
+    }
+
+    #captchaContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      background: rgba(0, 0, 0, 0.85);
+    }
+
+    .captcha-box {
+      text-align: center;
+      padding: 40px 20px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      backdrop-filter: blur(15px);
+      box-shadow: var(--shadow-primary);
+    }
+
+    .captcha-box h1 {
+      font-size: 26px;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+  </style>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <!-- Background Shapes -->
+  <div class="geometric-bg">
+    <div class="shape"></div>
+    <div class="shape"></div>
+    <div class="shape"></div>
+  </div>
+
+  <!-- CAPTCHA Screen -->
+  <div id="captchaContainer">
+    <div class="captcha-box">
+      <h1>Verifying You’re Human...</h1>
+      <div class="cf-turnstile"
+           data-sitekey="0x4AAAAAABZAaxOPTU1WimRl"
+           data-callback="onCaptchaSuccess"
+           data-theme="dark">
       </div>
     </div>
-    <div class="container" id="uiBox" style="display:none">
-      <div class="brand">
-        <div class="brand-text">⛔ Access Denied ⛔</div>
-      </div>
-      <h1>You do not have permission to view these files.</h1>
-      <p>Please close this page and continue to a valid location.</p>
-    </div>
-    <script>
-      function onCaptchaSuccess() {
-        document.getElementById("captchaContainer").style.display = "none";
-        const uiBox = document.getElementById("uiBox");
-        uiBox.style.display = "block";
-        setTimeout(() => uiBox.classList.add("show"), 100);
-      }
-     
-             function createStars(count) {
-            let starsContainer = document.querySelector(".stars");
-            for (let i = 0; i < count; i++) {
-                let star = document.createElement("div");
-                star.classList.add("star");
-                let size = Math.random() * 3 + 1;
-                star.style.width = `${size}px`;
-                star.style.height = `${size}px`;
-                star.style.left = `${Math.random() * 100}vw`;
-                star.style.top = `${Math.random() * 100}vh`;
-                star.style.animationDuration = `${Math.random() * 5 + 5}s`;
-                star.style.animationDelay = `${Math.random() * 5}s`;
-                starsContainer.appendChild(star);
-            }
-        }
+  </div>
 
-        function createMeteor() {
-            let meteor = document.createElement("div");
-            meteor.classList.add("meteor");
-            meteor.style.left = `${Math.random() * 100}vw`;
-            document.querySelector(".meteors").appendChild(meteor);
-            setTimeout(() => meteor.remove(), 3000);
-        }
-        setInterval(createMeteor, 10000);
+  <!-- Main Content -->
+  <div class="container" id="accessDenied">
+    <div class="brand-text">⛔ Access Denied ⛔</div>
+    <h1>You do not have permission to view these files.</h1>
+    <p>Please close this page and continue to a valid location.</p>
+  </div>
 
-        function createShootingStar() {
-            let star = document.createElement("div");
-            star.classList.add("shooting-star");
-            star.style.right = "0";
-            star.style.top = `${Math.random() * 100}vh`;
-            document.querySelector(".shooting-stars").appendChild(star);
-            setTimeout(() => star.remove(), 2000);
-        }
-        setInterval(createShootingStar, 7000);
+<div class="ad-banner">
+  <script type="text/javascript">
+	atOptions = {
+		'key' : '1838d373a94cfd1af0f24eabd4e34f52',
+		'format' : 'iframe',
+		'height' : 50,
+		'width' : 320,
+		'params' : {}
+	};
+</script>
+<script type="text/javascript" src="//www.highperformanceformat.com/1838d373a94cfd1af0f24eabd4e34f52/invoke.js"></script>
+</div>
 
-        createStars(150);
-    </script>
-  </body>
+  <script>
+    function onCaptchaSuccess() {
+      document.getElementById("captchaContainer").style.display = "none";
+      document.getElementById("accessDenied").classList.add("show");
+    }
+  </script>
+</body>
 </html>
