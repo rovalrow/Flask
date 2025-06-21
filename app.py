@@ -275,55 +275,19 @@ def botghost_generate():
 @app.route('/scriptguardian/files/scripts/loaders/<script_name>')
 def execute(script_name):
     script_name = sanitize_filename(script_name)
-
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
-    user_agent = request.headers.get("User-Agent", "").lower()
 
-    if not response.data:
-        return 'game.Players.LocalPlayer:Kick("This script is outdated...")', 200, {'Content-Type': 'text/plain'}
+    if response.data:
+        user_agent = request.headers.get("User-Agent", "").lower()
+        if not ("roblox" in user_agent or "robloxapp" in user_agent):
+            return render_template("unauthorized.html"), 403
 
-    if "roblox" not in user_agent and "robloxapp" not in user_agent:
-        return render_template("unauthorized.html"), 403
+        supabase.rpc("increment_execution_count").execute()
 
-    supabase.rpc("increment_execution_count").execute()
+        return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
 
-    # Actual raw script endpoint
-    raw_url = f"{request.host_url}scriptguardian/files/scripts/loaders/raw/{script_name}"
+    return 'game.Players.LocalPlayer:Kick("This script is outdated...")', 200, {'Content-Type': 'text/plain'}
 
-    # Discord invite
-    discord_invite = "https://discord.gg/tUPXVQjecv"
-
-    # Initial loader returned to Roblox
-    lua_loader = f"""-- ScriptGuardian Luarmor-Style Loader
-task.delay(2, function()
-    pcall(setclipboard, "{discord_invite}")
-end)
-
-local s, e = pcall(function()
-    loadstring(game:HttpGet("{raw_url}", true))()
-end)
-
-if not s then
-    game.Players.LocalPlayer:Kick("Script failed to load.")
-end"""
-
-    return lua_loader, 200, {'Content-Type': 'text/plain'}
-
-@app.route('/scriptguardian/files/scripts/loaders/raw/<script_name>')
-def serve_raw_script(script_name):
-    script_name = sanitize_filename(script_name)
-
-    response = supabase.table("scripts").select("content").eq("name", script_name).execute()
-    user_agent = request.headers.get("User-Agent", "").lower()
-
-    if not response.data:
-        return 'game.Players.LocalPlayer:Kick("Script no longer available")', 200, {'Content-Type': 'text/plain'}
-
-    if "roblox" not in user_agent and "robloxapp" not in user_agent:
-        return render_template("unauthorized.html"), 403
-
-    return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
-    
 @app.route('/get-total-executions')
 def get_total_executions():
     response = supabase.table("executions").select("count").eq("id", 1).execute()
