@@ -649,9 +649,9 @@
       <div class="stat-card" id="liveUserBtn">
         <span>Live Users: </span><span id="liveUserCount">Loading...</span>
       </div>
-      <div class="stat-card" id="joinDiscordBtn" onclick="window.open('https://discord.gg/tUPXVQjecv', '_blank')">
-    Join Discord
-</div>
+      <div class="stat-card join-discord" onclick="redirectToDiscord()">
+        Join Discord
+      </div>
     </div>
   </div>
 </header>
@@ -763,7 +763,7 @@
     <script>
         // Initialize Google AdSense
         (adsbygoogle = window.adsbygoogle || []).push({});
-
+	    
         // Configuration
         const CONFIG = {
             PARTICLE_COUNT: 50,
@@ -1111,7 +1111,11 @@
                 console.error('Unhandled promise rejection:', e.reason);
             });
         }
-        
+
+          function redirectToDiscord() {
+    window.open("https://discord.gg/tUPXVQjecv", "_blank");
+	  }
+	
         // Performance monitoring
         function setupPerformanceMonitoring() {
             // Monitor loading time
