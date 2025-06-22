@@ -286,7 +286,7 @@ def execute(script_name):
 
         return response.data[0]["content"], 200, {'Content-Type': 'text/plain'}
 
-    return 'game.Players.LocalPlayer:Kick("This script is outdated...")', 200, {'Content-Type': 'text/plain'}
+    return 'game.Players.LocalPlayer:Kick("Script Not Found -- Please Regenerate")', 200, {'Content-Type': 'text/plain'}
 
 @app.route('/get-total-executions')
 def get_total_executions():
