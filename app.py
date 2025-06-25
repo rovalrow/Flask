@@ -155,7 +155,7 @@ def create_trax():
         script_id = insert_result.data[0]["id"]
 
         return jsonify({
-            "link": f"https://scriptguardian.onrender.com/api/trax/raw/{script_id}"
+            "link": f"https://luaris.onrender.com/api/trax/raw/{script_id}"
         }), 200
 
     except Exception as e:
@@ -206,7 +206,7 @@ def generate():
         "created_at": datetime.utcnow().isoformat()  # ✅ Fixed: "now()" should be ISO datetime string
     }).execute()
 
-    return jsonify({"link": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}"}), 200
+    return jsonify({"link": f"{request.host_url}luaris/files/scripts/loaders/{script_name}"}), 200
 
 @app.route('/api/botghost/generate', methods=['POST'])
 def botghost_generate():
@@ -233,7 +233,7 @@ def botghost_generate():
         }).execute()
 
         # Replace real webhook in script with proxy
-        proxy_url = f"{request.host_url}scriptguardian/webhook/{webhook_id}"
+        proxy_url = f"{request.host_url}luaris/webhook/{webhook_id}"
         script_content = script_content.replace(webhook_url, proxy_url)
 
     # Obfuscate the script
@@ -268,11 +268,11 @@ def botghost_generate():
     return jsonify({
         "status": "success",
         "name": script_name,
-        "linkcode": f"{request.host_url}scriptguardian/files/scripts/loaders/{script_name}",
+        "linkcode": f"{request.host_url}luaris/files/scripts/loaders/{script_name}",
         "obfuscated_code": obfuscated_script
     }), 200
 
-@app.route('/scriptguardian/files/scripts/loaders/<script_name>')
+@app.route('/luaris/files/scripts/loaders/<script_name>')
 def execute(script_name):
     script_name = sanitize_filename(script_name)
     response = supabase.table("scripts").select("content").eq("name", script_name).execute()
@@ -360,7 +360,7 @@ def oldservers():
     except Exception as e:
         return f"Error: {str(e)}", 500
 
-@app.route('/scriptguardian/webhook/<webhook_id>', methods=['POST'])
+@app.route('/luaris/webhook/<webhook_id>', methods=['POST'])
 def proxy_webhook(webhook_id):
     result = supabase.table("webhooks").select("webhook_url").eq("id", webhook_id).execute()
     if not result.data:
